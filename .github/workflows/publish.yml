@@ -171,7 +171,37 @@ jobs:
           # Update package.json version
           npm version "$DEV_VERSION" --no-git-tag-version
 
-      - name: Publish to NPM
+      - name: Publish Core to NPM
+        run: npm publish --tag ${{ inputs.npm_tag }} --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Bump MCP version (beta only)
+        if: inputs.npm_tag == 'beta'
+        working-directory: packages/mcp
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          BETA_VERSION="${CURRENT_VERSION}-beta.$(date +%s)"
+          echo "Publishing MCP version: $BETA_VERSION"
+          npm version "$BETA_VERSION" --no-git-tag-version
+
+      - name: Bump MCP version (dev only)
+        if: inputs.npm_tag == 'dev'
+        working-directory: packages/mcp
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          DEV_VERSION="${CURRENT_VERSION}-dev.$(date +%s)"
+          echo "Publishing MCP version: $DEV_VERSION"
+          npm version "$DEV_VERSION" --no-git-tag-version
+
+      - name: Bump MCP version (latest only)
+        if: inputs.npm_tag == 'latest'
+        working-directory: packages/mcp
+        run: |
+          npm version ${{ inputs.version_bump }} --no-git-tag-version
+
+      - name: Publish MCP to NPM
+        working-directory: packages/mcp
         run: npm publish --tag ${{ inputs.npm_tag }} --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
