@@ -1,4 +1,4 @@
-import { envManager } from "@zilliz/claude-context-core";
+import { envManager } from "@tan-yong-sheng/claude-context-core";
 
 export interface ContextMcpConfig {
     name: string;
@@ -16,6 +16,7 @@ export interface ContextMcpConfig {
     ollamaModel?: string;
     ollamaHost?: string;
     // Vector database configuration
+    vectorDbProvider: 'milvus' | 'sqlite-vec';
     milvusAddress?: string; // Optional, can be auto-resolved from token
     milvusToken?: string;
 }
@@ -110,8 +111,11 @@ export function createMcpConfig(): ContextMcpConfig {
     console.log(`[DEBUG]   OLLAMA_MODEL: ${envManager.get('OLLAMA_MODEL') || 'NOT SET'}`);
     console.log(`[DEBUG]   GEMINI_API_KEY: ${envManager.get('GEMINI_API_KEY') ? 'SET (length: ' + envManager.get('GEMINI_API_KEY')!.length + ')' : 'NOT SET'}`);
     console.log(`[DEBUG]   OPENAI_API_KEY: ${envManager.get('OPENAI_API_KEY') ? 'SET (length: ' + envManager.get('OPENAI_API_KEY')!.length + ')' : 'NOT SET'}`);
+    console.log(`[DEBUG]   VECTOR_DB_PROVIDER: ${envManager.get('VECTOR_DB_PROVIDER') || 'NOT SET (default: sqlite-vec)'}`);
     console.log(`[DEBUG]   MILVUS_ADDRESS: ${envManager.get('MILVUS_ADDRESS') || 'NOT SET'}`);
     console.log(`[DEBUG]   NODE_ENV: ${envManager.get('NODE_ENV') || 'NOT SET'}`);
+
+    const vectorDbProvider = (envManager.get('VECTOR_DB_PROVIDER') as 'milvus' | 'sqlite-vec') || 'sqlite-vec';
 
     const config: ContextMcpConfig = {
         name: envManager.get('MCP_SERVER_NAME') || "Context MCP Server",
@@ -128,7 +132,8 @@ export function createMcpConfig(): ContextMcpConfig {
         // Ollama configuration
         ollamaModel: envManager.get('OLLAMA_MODEL'),
         ollamaHost: envManager.get('OLLAMA_HOST'),
-        // Vector database configuration - address can be auto-resolved from token
+        // Vector database configuration
+        vectorDbProvider,
         milvusAddress: envManager.get('MILVUS_ADDRESS'), // Optional, can be resolved from token
         milvusToken: envManager.get('MILVUS_TOKEN')
     };
@@ -143,7 +148,10 @@ export function logConfigurationSummary(config: ContextMcpConfig): void {
     console.log(`[MCP]   Server: ${config.name} v${config.version}`);
     console.log(`[MCP]   Embedding Provider: ${config.embeddingProvider}`);
     console.log(`[MCP]   Embedding Model: ${config.embeddingModel}`);
-    console.log(`[MCP]   Milvus Address: ${config.milvusAddress || (config.milvusToken ? '[Auto-resolve from token]' : '[Not configured]')}`);
+    console.log(`[MCP]   Vector DB Provider: ${config.vectorDbProvider}`);
+    if (config.vectorDbProvider === 'milvus') {
+        console.log(`[MCP]   Milvus Address: ${config.milvusAddress || (config.milvusToken ? '[Auto-resolve from token]' : '[Not configured]')}`);
+    }
 
     // Log provider-specific configuration without exposing sensitive data
     switch (config.embeddingProvider) {
@@ -175,7 +183,7 @@ export function showHelpMessage(): void {
     console.log(`
 Context MCP Server
 
-Usage: npx @zilliz/claude-context-mcp@latest [options]
+Usage: npx @tan-yong-sheng/claude-context-mcp@latest [options]
 
 Options:
   --help, -h                          Show this help message
@@ -200,26 +208,30 @@ Environment Variables:
   OLLAMA_MODEL            Ollama model name (alternative to EMBEDDING_MODEL for Ollama)
   
   Vector Database Configuration:
+  VECTOR_DB_PROVIDER      Vector database provider: milvus, sqlite-vec (default: sqlite-vec)
   MILVUS_ADDRESS          Milvus address (optional, can be auto-resolved from token)
   MILVUS_TOKEN            Milvus token (optional, used for authentication and address resolution)
 
 Examples:
-  # Start MCP server with OpenAI (default) and explicit Milvus address
-  OPENAI_API_KEY=sk-xxx MILVUS_ADDRESS=localhost:19530 npx @zilliz/claude-context-mcp@latest
-  
+  # Start MCP server with OpenAI (default) and sqlite-vec (default vector DB)
+  OPENAI_API_KEY=sk-xxx npx @tan-yong-sheng/claude-context-mcp@latest
+
+  # Start MCP server with OpenAI and Milvus
+  OPENAI_API_KEY=sk-xxx VECTOR_DB_PROVIDER=milvus MILVUS_TOKEN=your-token npx @tan-yong-sheng/claude-context-mcp@latest
+
   # Start MCP server with OpenAI and specific model
-  OPENAI_API_KEY=sk-xxx EMBEDDING_MODEL=text-embedding-3-large MILVUS_TOKEN=your-token npx @zilliz/claude-context-mcp@latest
-  
+  OPENAI_API_KEY=sk-xxx EMBEDDING_MODEL=text-embedding-3-large npx @tan-yong-sheng/claude-context-mcp@latest
+
   # Start MCP server with VoyageAI and specific model
-  EMBEDDING_PROVIDER=VoyageAI VOYAGEAI_API_KEY=pa-xxx EMBEDDING_MODEL=voyage-3-large MILVUS_TOKEN=your-token npx @zilliz/claude-context-mcp@latest
-  
+  EMBEDDING_PROVIDER=VoyageAI VOYAGEAI_API_KEY=pa-xxx EMBEDDING_MODEL=voyage-3-large npx @tan-yong-sheng/claude-context-mcp@latest
+
   # Start MCP server with Gemini and specific model
-  EMBEDDING_PROVIDER=Gemini GEMINI_API_KEY=xxx EMBEDDING_MODEL=gemini-embedding-001 MILVUS_TOKEN=your-token npx @zilliz/claude-context-mcp@latest
-  
+  EMBEDDING_PROVIDER=Gemini GEMINI_API_KEY=xxx EMBEDDING_MODEL=gemini-embedding-001 npx @tan-yong-sheng/claude-context-mcp@latest
+
   # Start MCP server with Ollama and specific model (using OLLAMA_MODEL)
-  EMBEDDING_PROVIDER=Ollama OLLAMA_MODEL=mxbai-embed-large MILVUS_TOKEN=your-token npx @zilliz/claude-context-mcp@latest
-  
+  EMBEDDING_PROVIDER=Ollama OLLAMA_MODEL=mxbai-embed-large npx @tan-yong-sheng/claude-context-mcp@latest
+
   # Start MCP server with Ollama and specific model (using EMBEDDING_MODEL)
-  EMBEDDING_PROVIDER=Ollama EMBEDDING_MODEL=nomic-embed-text MILVUS_TOKEN=your-token npx @zilliz/claude-context-mcp@latest
+  EMBEDDING_PROVIDER=Ollama EMBEDDING_MODEL=nomic-embed-text npx @tan-yong-sheng/claude-context-mcp@latest
         `);
 } 

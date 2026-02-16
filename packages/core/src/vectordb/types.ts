@@ -41,6 +41,11 @@ export interface VectorSearchResult {
     score: number;
 }
 
+/**
+ * Vector database provider types
+ */
+export type VectorDbProvider = 'milvus' | 'sqlite-vec';
+
 export interface HybridSearchResult {
     document: VectorDocument;
     score: number;

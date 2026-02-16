@@ -1,34 +1,41 @@
-# @zilliz/claude-context-core
+# @tan-yong-sheng/claude-context-core
 ![](../../assets/claude-context.png)
 
 The core indexing engine for Claude Context - a powerful tool for semantic search and analysis of codebases using vector embeddings and AI.
 
-[![npm version](https://img.shields.io/npm/v/@zilliz/claude-context-core.svg)](https://www.npmjs.com/package/@zilliz/claude-context-core)
-[![npm downloads](https://img.shields.io/npm/dm/@zilliz/claude-context-core.svg)](https://www.npmjs.com/package/@zilliz/claude-context-core)
+[![npm version](https://img.shields.io/npm/v/@tan-yong-sheng/claude-context-core.svg)](https://www.npmjs.com/package/@tan-yong-sheng/claude-context-core)
+[![npm downloads](https://img.shields.io/npm/dm/@tan-yong-sheng/claude-context-core.svg)](https://www.npmjs.com/package/@tan-yong-sheng/claude-context-core)
 
 > 📖 **New to Claude Context?** Check out the [main project README](../../README.md) for an overview and quick start guide.
 
 ## Installation
 
 ```bash
-npm install @zilliz/claude-context-core
+npm install @tan-yong-sheng/claude-context-core
 ```
 
 ### Prepare Environment Variables
-#### OpenAI API key
+
+#### Option 1: SQLite-vec (Recommended - Zero Config)
+No additional configuration needed! sqlite-vec uses local SQLite files for vector storage.
+
+```bash
+# Optional: Custom directory for vector databases (defaults to ~/.claude-context/vectors)
+VECTOR_DB_PATH=/custom/path/to/vectors
+```
+
+#### Option 2: OpenAI API key (for embeddings)
 See [OpenAI Documentation](https://platform.openai.com/docs/api-reference) for more details to get your API key.
 ```bash
 OPENAI_API_KEY=your-openai-api-key
 ```
 
-#### Zilliz Cloud configuration
-Get a free Milvus vector database on Zilliz Cloud. 
-
-Claude Context needs a vector database. You can [sign up](https://cloud.zilliz.com/signup?utm_source=github&utm_medium=referral&utm_campaign=2507-codecontext-readme) on Zilliz Cloud to get a free Serverless cluster.
+#### Option 3: Zilliz Cloud configuration (Optional)
+If you prefer using Milvus/Zilliz Cloud instead of sqlite-vec. You can [sign up](https://cloud.zilliz.com/signup?utm_source=github&utm_medium=referral&utm_campaign=2507-codecontext-readme) on Zilliz Cloud to get a free Serverless cluster.
 
 ![](../../assets/signup_and_create_cluster.jpeg)
 
-After creating your cluster, open your Zilliz Cloud console and copy both the **public endpoint** and your **API key**.  
+After creating your cluster, open your Zilliz Cloud console and copy both the **public endpoint** and your **API key**.
 These will be used as `your-zilliz-cloud-public-endpoint` and `your-zilliz-cloud-api-key` in the configuration examples.
 
 ![Zilliz Cloud Dashboard](../../assets/zilliz_cloud_dashboard.jpeg)
@@ -40,18 +47,69 @@ If you need help creating your free vector database or finding these values, see
 ```bash
 MILVUS_ADDRESS=your-zilliz-cloud-public-endpoint
 MILVUS_TOKEN=your-zilliz-cloud-api-key
-``` 
+```
 
 > 💡 **Tip**: For easier configuration management across different usage scenarios, consider using [global environment variables](../../docs/getting-started/environment-variables.md).
 
 ## Quick Start
 
+### Option 1: SQLite-vec (Recommended - Zero Config)
+
+The easiest way to get started with local vector storage using SQLite:
+
 ```typescript
-import { 
-  Context, 
-  OpenAIEmbedding, 
-  MilvusVectorDatabase 
-} from '@zilliz/claude-context-core';
+import {
+  Context,
+  OpenAIEmbedding,
+  SqliteVecVectorDatabase
+} from '@tan-yong-sheng/claude-context-core';
+
+// Initialize embedding provider
+const embedding = new OpenAIEmbedding({
+  apiKey: process.env.OPENAI_API_KEY || 'your-openai-api-key',
+  model: 'text-embedding-3-small'
+});
+
+// Initialize sqlite-vec vector database (zero config!)
+const vectorDatabase = new SqliteVecVectorDatabase();
+
+// Create context instance
+const context = new Context({
+  embedding,
+  vectorDatabase
+});
+
+// Index a codebase
+const stats = await context.indexCodebase('./my-project', (progress) => {
+  console.log(`${progress.phase} - ${progress.percentage}%`);
+});
+
+console.log(`Indexed ${stats.indexedFiles} files with ${stats.totalChunks} chunks`);
+
+// Search the codebase
+const results = await context.semanticSearch(
+  './my-project',
+  'function that handles user authentication',
+  5
+);
+
+results.forEach(result => {
+  console.log(`${result.relativePath}:${result.startLine}-${result.endLine}`);
+  console.log(`Score: ${result.score}`);
+  console.log(result.content);
+});
+```
+
+### Option 2: Milvus/Zilliz Cloud
+
+For production workloads or shared indexes:
+
+```typescript
+import {
+  Context,
+  OpenAIEmbedding,
+  MilvusVectorDatabase
+} from '@tan-yong-sheng/claude-context-core';
 
 // Initialize embedding provider
 const embedding = new OpenAIEmbedding({
@@ -111,7 +169,12 @@ results.forEach(result => {
 
 ## Vector Database Support
 
-- **Milvus/Zilliz Cloud** - High-performance vector database
+- **SQLite-vec** - Zero-config local vector database using SQLite (recommended for getting started)
+  - Stores vectors in local SQLite files
+  - No external dependencies or services
+  - Hybrid search with FTS5 support
+  - Cross-platform (Linux, macOS, Windows)
+- **Milvus/Zilliz Cloud** - High-performance distributed vector database for production
 
 ## Code Splitters
 
@@ -190,10 +253,42 @@ interface SemanticSearchResult {
 
 ## Examples
 
-### Using VoyageAI Embeddings
+### Using SQLite-vec with Local Embeddings (Ollama)
 
 ```typescript
-import { Context, MilvusVectorDatabase, VoyageAIEmbedding } from '@zilliz/claude-context-core';
+import {
+  Context,
+  SqliteVecVectorDatabase,
+  OllamaEmbedding
+} from '@tan-yong-sheng/claude-context-core';
+
+// Use Ollama for local embeddings (no API keys needed!)
+const embedding = new OllamaEmbedding({
+  model: 'nomic-embed-text',
+  baseUrl: 'http://localhost:11434'
+});
+
+// sqlite-vec for local vector storage
+const vectorDatabase = new SqliteVecVectorDatabase();
+
+const context = new Context({
+  embedding,
+  vectorDatabase
+});
+
+// Index and search completely offline!
+await context.indexCodebase('./my-project');
+const results = await context.semanticSearch('./my-project', 'authentication');
+```
+
+### Using VoyageAI Embeddings with Milvus
+
+```typescript
+import {
+  Context,
+  MilvusVectorDatabase,
+  VoyageAIEmbedding
+} from '@tan-yong-sheng/claude-context-core';
 
 // Initialize with VoyageAI embedding provider
 const embedding = new VoyageAIEmbedding({
@@ -215,6 +310,15 @@ const context = new Context({
 ### Custom File Filtering
 
 ```typescript
+import { Context, SqliteVecVectorDatabase, OpenAIEmbedding } from '@tan-yong-sheng/claude-context-core';
+
+const embedding = new OpenAIEmbedding({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'text-embedding-3-small'
+});
+
+const vectorDatabase = new SqliteVecVectorDatabase();
+
 const context = new Context({
   embedding,
   vectorDatabase,

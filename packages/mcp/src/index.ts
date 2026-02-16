@@ -21,8 +21,9 @@ import {
     ListToolsRequestSchema,
     CallToolRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
-import { Context } from "@zilliz/claude-context-core";
-import { MilvusVectorDatabase } from "@zilliz/claude-context-core";
+import { Context } from "@tan-yong-sheng/claude-context-core";
+import { createVectorDatabase } from "@tan-yong-sheng/claude-context-core";
+import { VectorDbProvider } from "@tan-yong-sheng/claude-context-core";
 
 // Import our modular components
 import { createMcpConfig, logConfigurationSummary, showHelpMessage, ContextMcpConfig } from "./config.js";
@@ -59,10 +60,18 @@ class ContextMcpServer {
         const embedding = createEmbeddingInstance(config);
         logEmbeddingProviderInfo(config, embedding);
 
-        // Initialize vector database
-        const vectorDatabase = new MilvusVectorDatabase({
-            address: config.milvusAddress,
-            ...(config.milvusToken && { token: config.milvusToken })
+        // Initialize vector database based on provider
+        console.log(`[VECTOR_DB] Initializing vector database provider: ${config.vectorDbProvider}`);
+
+        const vectorDatabase = createVectorDatabase({
+            provider: config.vectorDbProvider as VectorDbProvider,
+            milvus: {
+                address: config.milvusAddress,
+                ...(config.milvusToken && { token: config.milvusToken })
+            },
+            sqliteVec: {
+                // Uses default path ~/.claude-context/vectors/
+            }
         });
 
         // Initialize Claude Context

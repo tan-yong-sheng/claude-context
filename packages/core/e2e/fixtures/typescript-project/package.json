@@ -1,0 +1,13 @@
+{
+    "name": "typescript-test-project",
+    "version": "1.0.0",
+    "description": "Test TypeScript project for E2E tests",
+    "main": "src/index.ts",
+    "scripts": {
+        "build": "tsc",
+        "test": "jest"
+    },
+    "devDependencies": {
+        "typescript": "^5.0.0"
+    }
+}
