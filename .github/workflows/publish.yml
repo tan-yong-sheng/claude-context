@@ -1,7 +1,7 @@
 name: Publish to NPM
 
 on:
-  # Manual trigger with tag selection
+  # Manual trigger only (via GitHub UI or gh CLI)
   workflow_dispatch:
     inputs:
       npm_tag:
@@ -22,15 +22,6 @@ on:
           - patch
           - minor
           - major
-
-  # Auto-publish dev version on pushes to main/master
-  push:
-    branches:
-      - main
-      - master
-    paths:
-      - 'packages/core/**'
-      - '.github/workflows/publish.yml'
 
 jobs:
   # Job 1: Build package (uses core package only)
@@ -93,92 +84,8 @@ jobs:
           path: packages/core/dist
           retention-days: 1
 
-  # Job 2: Publish dev version (auto on push to main)
-  publish-dev:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    defaults:
-      run:
-        working-directory: packages/core
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: packages/core/dist
-
-      - name: Configure Git
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-
-      - name: Bump to dev version
-        run: |
-          # Get current version
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-
-          # Create dev version: x.x.x-dev.<timestamp>
-          DEV_VERSION="${CURRENT_VERSION}-dev.$(date +%s)"
-
-          echo "Publishing version: $DEV_VERSION"
-
-          # Update package.json version
-          npm version "$DEV_VERSION" --no-git-tag-version
-
-      - name: Publish to NPM (dev tag)
-        run: npm publish --tag dev --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Comment on commit
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const version = require('./packages/core/package.json').version;
-            github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-              body: `📦 Published dev version \`${version}\` to NPM with tag \`dev\`\n\nInstall with:\`npm install @tan-yong-sheng/claude-context-core@dev\``
-            })
-
-  # Job 3: Publish manual (beta or latest)
-  publish-manual:
+  # Job 2: Publish manual (dev, beta, or latest)
+  publish:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
@@ -249,6 +156,20 @@ jobs:
 
           # Update package.json version
           npm version "$BETA_VERSION" --no-git-tag-version
+
+      - name: Bump to dev version (dev only)
+        if: inputs.npm_tag == 'dev'
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+
+          # Create dev version: x.x.x-dev.<timestamp>
+          DEV_VERSION="${CURRENT_VERSION}-dev.$(date +%s)"
+
+          echo "Publishing version: $DEV_VERSION"
+
+          # Update package.json version
+          npm version "$DEV_VERSION" --no-git-tag-version
 
       - name: Publish to NPM
         run: npm publish --tag ${{ inputs.npm_tag }} --access public

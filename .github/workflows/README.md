@@ -15,22 +15,30 @@ This directory contains GitHub Actions workflows for the claude-context project.
 
 ## Publishing to NPM
 
-The `publish.yml` workflow provides flexible publishing options:
+The `publish.yml` workflow is **manual only** - it does not trigger automatically on push.
 
-### Automatic Dev Publishing
+### How to Publish
 
-Every push to `main`/`master` that changes files in `packages/core/` will automatically:
-1. Run E2E tests
-2. Build the package
-3. Publish a dev version with timestamp (e.g., `0.0.1-dev.1739701234`)
-4. Tag it as `dev` on NPM
+#### Option 1: GitHub Actions UI
 
-Install the latest dev version:
+1. Go to **Actions** → **Publish to NPM** → **Run workflow**
+2. Select the NPM tag (`dev`, `beta`, or `latest`)
+3. Click **Run workflow**
+
+#### Option 2: GitHub CLI (gh)
+
 ```bash
-npm install @tan-yong-sheng/claude-context-core@dev
+# Publish dev version
+gh workflow run publish.yml -f npm_tag=dev
+
+# Publish beta version
+gh workflow run publish.yml -f npm_tag=beta
+
+# Publish latest (production) version
+gh workflow run publish.yml -f npm_tag=latest -f version_bump=patch
 ```
 
-### Manual Publishing
+### Publishing Options
 
 #### Publish Beta Version
 
