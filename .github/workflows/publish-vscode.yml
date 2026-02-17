@@ -1,0 +1,195 @@
+name: Publish VSCode Extension
+
+on:
+  # Manual trigger only (via GitHub UI or gh CLI)
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - beta
+          - release
+      version_bump:
+        description: 'Version bump type (only for release)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  # Job 1: Build VSCode Extension
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rebuild native dependencies
+        run: |
+          cd ${{ github.workspace }}/node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
+          npx prebuild-install --force || npm run build-release
+
+      # Build core first so VSCode extension can use its types
+      - name: Build core package
+        run: pnpm --filter @tan-yong-sheng/code-context-core build
+
+      # Build VSCode extension
+      - name: Build VSCode extension
+        run: pnpm --filter code-context webpack
+
+      # Package the extension
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Package extension
+        run: |
+          cd packages/vscode-extension
+          vsce package --no-dependencies
+
+      # Upload the vsix artifact
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension-vsix
+          path: packages/vscode-extension/*.vsix
+          retention-days: 1
+
+  # Job 2: Publish to VSCode Marketplace
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rebuild native dependencies
+        run: |
+          cd ${{ github.workspace }}/node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
+          npx prebuild-install --force || npm run build-release
+
+      # Build core first
+      - name: Build core package
+        run: pnpm --filter @tan-yong-sheng/code-context-core build
+
+      # Build VSCode extension
+      - name: Build VSCode extension
+        run: pnpm --filter code-context webpack
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      # Bump version based on release type
+      - name: Bump version
+        id: bump-version
+        run: |
+          cd packages/vscode-extension
+          if [ "${{ inputs.release_type }}" == "release" ]; then
+            npm version ${{ inputs.version_bump }} --no-git-tag-version
+          else
+            CURRENT_VERSION=$(node -p "require('./package.json').version")
+            PRE_RELEASE_TAG="${{ inputs.release_type }}"
+            NEW_VERSION="${CURRENT_VERSION}-${PRE_RELEASE_TAG}.$(date +%s)"
+            echo "Publishing version: $NEW_VERSION"
+            npm version "$NEW_VERSION" --no-git-tag-version
+          fi
+          echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      # Publish to VSCode Marketplace
+      - name: Publish to VSCode Marketplace
+        run: |
+          cd packages/vscode-extension
+          if [ "${{ inputs.release_type }}" == "release" ]; then
+            vsce publish --no-dependencies -p ${{ secrets.VSCE_PAT }}
+          else
+            vsce publish --pre-release --no-dependencies -p ${{ secrets.VSCE_PAT }}
+          fi
+
+      # Create Git tag for releases
+      - name: Create Git tag (release only)
+        if: inputs.release_type == 'release'
+        run: |
+          cd packages/vscode-extension
+          VERSION=$(node -p "require('./package.json').version")
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git tag "vscode-v${VERSION}"
+          git push origin "vscode-v${VERSION}"
+
+      # Create GitHub Release for releases
+      - name: Create GitHub Release (release only)
+        if: inputs.release_type == 'release'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = require('./packages/vscode-extension/package.json').version;
+            github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `vscode-v${version}`,
+              name: `VSCode Extension v${version}`,
+              generate_release_notes: true
+            });

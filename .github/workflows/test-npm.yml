@@ -1,4 +1,4 @@
-name: E2E Tests - sqlite-vec
+name: Test NPM Packages
 
 on:
   push:
@@ -6,13 +6,15 @@ on:
     paths:
       - 'packages/core/src/**'
       - 'packages/core/e2e/**'
-      - '.github/workflows/e2e-test.yml'
+      - 'packages/mcp/src/**'
+      - '.github/workflows/test-npm.yml'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'packages/core/src/**'
       - 'packages/core/e2e/**'
-      - '.github/workflows/e2e-test.yml'
+      - 'packages/mcp/src/**'
+      - '.github/workflows/test-npm.yml'
   workflow_dispatch:
 
 jobs:
