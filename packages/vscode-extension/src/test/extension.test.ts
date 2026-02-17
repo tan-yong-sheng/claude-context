@@ -10,7 +10,7 @@ suite('Extension Test Suite', () => {
     });
 
     test('Extension should activate', async () => {
-        const extension = vscode.extensions.getExtension('tan-yong-sheng.code-context');
+        const extension = vscode.extensions.getExtension('tan-yong-sheng.ai-code-context');
         assert.ok(extension, 'Extension should be installed');
 
         if (!extension.isActive) {
@@ -37,7 +37,7 @@ suite('Extension Test Suite', () => {
     });
 
     test('Extension exports should be available after activation', async () => {
-        const extension = vscode.extensions.getExtension('tan-yong-sheng.code-context');
+        const extension = vscode.extensions.getExtension('tan-yong-sheng.ai-code-context');
         assert.ok(extension, 'Extension should be installed');
 
         const api = await extension.activate();
