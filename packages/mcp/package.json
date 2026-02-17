@@ -15,7 +15,6 @@
         "typecheck": "tsc --noEmit",
         "start": "tsx src/index.ts",
         "start:with-env": "OPENAI_API_KEY=${OPENAI_API_KEY:your-api-key-here} MILVUS_ADDRESS=${MILVUS_ADDRESS:localhost:19530} tsx src/index.ts",
-        "prepublishOnly": "pnpm build",
         "test": "jest --config jest.config.cjs",
         "test:watch": "jest --config jest.config.cjs --watch",
         "test:coverage": "jest --config jest.config.cjs --coverage"
