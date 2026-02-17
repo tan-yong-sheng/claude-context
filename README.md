@@ -2,6 +2,8 @@
 
 ### Your entire codebase as Claude's context
 
+Note: This project is a fork of Claude Context: https://github.com/zilliztech/claude-context to replace the milvus vector database to sqlite
+
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org/)
 [![Documentation](https://img.shields.io/badge/Documentation-📚-orange.svg)](docs/)
