@@ -70,7 +70,9 @@ jobs:
 
       # Build VSCode extension
       - name: Build VSCode extension
-        run: pnpm --filter code-context webpack
+        run: |
+          cd packages/vscode-extension
+          pnpm webpack
 
       # Package the extension
       - name: Install vsce
@@ -137,7 +139,9 @@ jobs:
 
       # Build VSCode extension
       - name: Build VSCode extension
-        run: pnpm --filter code-context webpack
+        run: |
+          cd packages/vscode-extension
+          pnpm webpack
 
       - name: Install vsce
         run: npm install -g @vscode/vsce
