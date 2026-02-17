@@ -20,7 +20,7 @@ Claude Context supports a global configuration file at `~/.context/.env` to simp
 ### Embedding Provider
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `EMBEDDING_PROVIDER` | Provider: `OpenAI`, `VoyageAI`, `Gemini`, `Ollama` | `OpenAI` |
+| `EMBEDDING_PROVIDER` | Provider: `openai`, `voyage`, `gemini`, `ollama` | `openai` |
 | `EMBEDDING_MODEL` | Embedding model name (works for all providers) | Provider-specific default |
 | `OPENAI_API_KEY` | OpenAI API key | Required for OpenAI |
 | `OPENAI_BASE_URL` | OpenAI API base URL (optional, for custom endpoints) | `https://api.openai.com/v1` |
@@ -70,7 +70,7 @@ Claude Context supports a global configuration file at `~/.context/.env` to simp
 ```bash
 mkdir -p ~/.context
 cat > ~/.context/.env << 'EOF'
-EMBEDDING_PROVIDER=OpenAI
+EMBEDDING_PROVIDER=openai
 OPENAI_API_KEY=sk-your-openai-api-key
 EMBEDDING_MODEL=text-embedding-3-small
 MILVUS_TOKEN=your-zilliz-cloud-api-key

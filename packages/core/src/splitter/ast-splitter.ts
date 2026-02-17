@@ -1,16 +1,34 @@
-import Parser from 'tree-sitter';
 import { Splitter, CodeChunk } from './index';
 
-// Language parsers
-const JavaScript = require('tree-sitter-javascript');
-const TypeScript = require('tree-sitter-typescript').typescript;
-const Python = require('tree-sitter-python');
-const Java = require('tree-sitter-java');
-const Cpp = require('tree-sitter-cpp');
-const Go = require('tree-sitter-go');
-const Rust = require('tree-sitter-rust');
-const CSharp = require('tree-sitter-c-sharp');
-const Scala = require('tree-sitter-scala');
+// Language parsers - lazy loaded to handle missing tree-sitter bindings
+let Parser: any;
+let JavaScript: any;
+let TypeScript: any;
+let Python: any;
+let Java: any;
+let Cpp: any;
+let Go: any;
+let Rust: any;
+let CSharp: any;
+let Scala: any;
+let treeSitterAvailable = false;
+
+// Try to load tree-sitter and language parsers
+try {
+    Parser = require('tree-sitter');
+    JavaScript = require('tree-sitter-javascript');
+    TypeScript = require('tree-sitter-typescript').typescript;
+    Python = require('tree-sitter-python');
+    Java = require('tree-sitter-java');
+    Cpp = require('tree-sitter-cpp');
+    Go = require('tree-sitter-go');
+    Rust = require('tree-sitter-rust');
+    CSharp = require('tree-sitter-c-sharp');
+    Scala = require('tree-sitter-scala');
+    treeSitterAvailable = true;
+} catch (error) {
+    console.warn('[ASTSplitter] ⚠️ Tree-sitter not available, AST splitting disabled:', (error as Error).message);
+}
 
 // Node types that represent logical code units
 const SPLITTABLE_NODE_TYPES = {
@@ -28,20 +46,36 @@ const SPLITTABLE_NODE_TYPES = {
 export class AstCodeSplitter implements Splitter {
     private chunkSize: number = 2500;
     private chunkOverlap: number = 300;
-    private parser: Parser;
+    private parser: any | null = null;
     private langchainFallback: any; // LangChainCodeSplitter for fallback
+    private useAst: boolean = false;
 
     constructor(chunkSize?: number, chunkOverlap?: number) {
         if (chunkSize) this.chunkSize = chunkSize;
         if (chunkOverlap) this.chunkOverlap = chunkOverlap;
-        this.parser = new Parser();
 
         // Initialize fallback splitter
         const { LangChainCodeSplitter } = require('./langchain-splitter');
         this.langchainFallback = new LangChainCodeSplitter(chunkSize, chunkOverlap);
+
+        // Only initialize parser if tree-sitter is available
+        if (treeSitterAvailable && Parser) {
+            try {
+                this.parser = new Parser();
+                this.useAst = true;
+            } catch (error) {
+                console.warn('[ASTSplitter] ⚠️ Failed to initialize tree-sitter parser:', (error as Error).message);
+            }
+        }
     }
 
     async split(code: string, language: string, filePath?: string): Promise<CodeChunk[]> {
+        // If tree-sitter is not available, always use langchain fallback
+        if (!this.useAst || !this.parser) {
+            console.log(`📝 Tree-sitter not available, using LangChain splitter for: ${filePath || 'unknown'}`);
+            return await this.langchainFallback.split(code, language, filePath);
+        }
+
         // Check if language is supported by AST splitter
         const langConfig = this.getLanguageConfig(language);
         if (!langConfig) {
@@ -107,7 +141,7 @@ export class AstCodeSplitter implements Splitter {
     }
 
     private extractChunks(
-        node: Parser.SyntaxNode,
+        node: any,
         code: string,
         splittableTypes: string[],
         language: string,
@@ -116,7 +150,7 @@ export class AstCodeSplitter implements Splitter {
         const chunks: CodeChunk[] = [];
         const codeLines = code.split('\n');
 
-        const traverse = (currentNode: Parser.SyntaxNode) => {
+        const traverse = (currentNode: any) => {
             // Check if this node type should be split into a chunk
             if (splittableTypes.includes(currentNode.type)) {
                 const startLine = currentNode.startPosition.row + 1;

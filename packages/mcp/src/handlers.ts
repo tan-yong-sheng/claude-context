@@ -69,37 +69,58 @@ export class ToolHandlers {
 
                     console.log(`[SYNC-CLOUD] 🔍 Checking collection: ${collectionName}`);
 
-                    // Query the first document to get metadata
-                    const results = await vectorDb.query(
-                        collectionName,
-                        '', // Empty filter to get all results
-                        ['metadata'], // Only fetch metadata field
-                        1 // Only need one result to extract codebasePath
-                    );
+                    let codebasePath: string | undefined;
 
-                    if (results && results.length > 0) {
-                        const firstResult = results[0];
-                        const metadataStr = firstResult.metadata;
-
-                        if (metadataStr) {
-                            try {
-                                const metadata = JSON.parse(metadataStr);
-                                const codebasePath = metadata.codebasePath;
-
-                                if (codebasePath && typeof codebasePath === 'string') {
-                                    console.log(`[SYNC-CLOUD] 📍 Found codebase path: ${codebasePath} in collection: ${collectionName}`);
-                                    cloudCodebases.add(codebasePath);
-                                } else {
-                                    console.warn(`[SYNC-CLOUD] ⚠️  No codebasePath found in metadata for collection: ${collectionName}`);
-                                }
-                            } catch (parseError) {
-                                console.warn(`[SYNC-CLOUD] ⚠️  Failed to parse metadata JSON for collection ${collectionName}:`, parseError);
-                            }
-                        } else {
-                            console.warn(`[SYNC-CLOUD] ⚠️  No metadata found in collection: ${collectionName}`);
+                    // For sqlite-vec, try to extract hash from collection name and look up original path
+                    const hashMatch = collectionName.match(/^(?:hybrid_)?code_chunks_([a-f0-9]{8,16})$/);
+                    if (hashMatch) {
+                        const hash = hashMatch[1];
+                        // Try to look up the original path from the hash
+                        const { getOriginalPath } = await import('@tan-yong-sheng/claude-context-core');
+                        const originalPath = getOriginalPath(hash);
+                        if (originalPath) {
+                            codebasePath = originalPath;
+                            console.log(`[SYNC-CLOUD] 📍 Found codebase path from hash mapping: ${codebasePath} (hash: ${hash})`);
                         }
+                    }
+
+                    // Fallback: Query the first document to get metadata
+                    if (!codebasePath) {
+                        try {
+                            const results = await vectorDb.query(
+                                collectionName,
+                                '', // Empty filter to get all results
+                                ['metadata'], // Only fetch metadata field
+                                1 // Only need one result to extract codebasePath
+                            );
+
+                            if (results && results.length > 0) {
+                                const firstResult = results[0];
+                                const metadataStr = firstResult.metadata;
+
+                                if (metadataStr) {
+                                    try {
+                                        const metadata = JSON.parse(metadataStr);
+                                        if (metadata.codebasePath && typeof metadata.codebasePath === 'string') {
+                                            codebasePath = metadata.codebasePath;
+                                            console.log(`[SYNC-CLOUD] 📍 Found codebase path from metadata: ${codebasePath} in collection: ${collectionName}`);
+                                        }
+                                    } catch (parseError) {
+                                        console.warn(`[SYNC-CLOUD] ⚠️  Failed to parse metadata JSON for collection ${collectionName}:`, parseError);
+                                    }
+                                }
+                            } else {
+                                console.log(`[SYNC-CLOUD] ℹ️  Collection ${collectionName} is empty`);
+                            }
+                        } catch (queryError: any) {
+                            console.warn(`[SYNC-CLOUD] ⚠️  Error querying collection ${collectionName}:`, queryError.message || queryError);
+                        }
+                    }
+
+                    if (codebasePath) {
+                        cloudCodebases.add(codebasePath);
                     } else {
-                        console.log(`[SYNC-CLOUD] ℹ️  Collection ${collectionName} is empty`);
+                        console.warn(`[SYNC-CLOUD] ⚠️  Could not determine codebase path for collection: ${collectionName}`);
                     }
                 } catch (collectionError: any) {
                     console.warn(`[SYNC-CLOUD] ⚠️  Error checking collection ${collectionName}:`, collectionError.message || collectionError);

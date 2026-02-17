@@ -228,7 +228,9 @@ export class SqliteVecVectorDatabase implements VectorDatabase {
         const { listAllVectorDbs } = await import('../utils/vector-paths');
         const dbs = listAllVectorDbs();
 
-        return dbs.map(db => db.originalPath || db.hash).filter(Boolean) as string[];
+        // Return collection names in the format expected by sync logic
+        // Each db file represents a codebase, return as hybrid_code_chunks_<hash>
+        return dbs.map(db => `hybrid_code_chunks_${db.hash}`).filter(Boolean) as string[];
     }
 
     async insert(collectionName: string, documents: VectorDocument[]): Promise<void> {

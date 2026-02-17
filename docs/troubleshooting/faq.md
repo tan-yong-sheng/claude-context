@@ -25,7 +25,7 @@ Final Files = (All Supported Extensions) - (All Ignore Patterns)
    - `MILVUS_TOKEN=your-optional-token` (if authentication is enabled)
 
 2. **Embedding Service (Ollama)**: Install and run [Ollama](https://ollama.com/) locally for embedding generation. Configure:
-   - `EMBEDDING_PROVIDER=Ollama`
+   - `EMBEDDING_PROVIDER=ollama`
    - `OLLAMA_HOST=http://127.0.0.1:11434` (or your Ollama server URL)
    - `OLLAMA_MODEL=nomic-embed-text` (or your preferred embedding model)
 

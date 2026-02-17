@@ -132,7 +132,7 @@ Pasting the following configuration into your Cursor `~/.cursor/mcp.json` file i
       "command": "npx",
       "args": ["-y", "@zilliz/claude-context-mcp@latest"],
       "env": {
-        "EMBEDDING_PROVIDER": "OpenAI",
+        "EMBEDDING_PROVIDER": "openai",
         "OPENAI_API_KEY": "your-openai-api-key",
         "MILVUS_TOKEN": "your-zilliz-cloud-api-key"
       }
@@ -149,7 +149,7 @@ Pasting the following configuration into your Cursor `~/.cursor/mcp.json` file i
       "command": "npx",
       "args": ["-y", "@zilliz/claude-context-mcp@latest"],
       "env": {
-        "EMBEDDING_PROVIDER": "VoyageAI",
+        "EMBEDDING_PROVIDER": "voyage",
         "VOYAGEAI_API_KEY": "your-voyageai-api-key",
         "EMBEDDING_MODEL": "voyage-code-3",
         "MILVUS_TOKEN": "your-zilliz-cloud-api-key"
@@ -167,7 +167,7 @@ Pasting the following configuration into your Cursor `~/.cursor/mcp.json` file i
       "command": "npx",
       "args": ["-y", "@zilliz/claude-context-mcp@latest"],
       "env": {
-        "EMBEDDING_PROVIDER": "Gemini",
+        "EMBEDDING_PROVIDER": "gemini",
         "GEMINI_API_KEY": "your-gemini-api-key",
         "MILVUS_TOKEN": "your-zilliz-cloud-api-key"
       }
@@ -184,7 +184,7 @@ Pasting the following configuration into your Cursor `~/.cursor/mcp.json` file i
       "command": "npx",
       "args": ["-y", "@zilliz/claude-context-mcp@latest"],
       "env": {
-        "EMBEDDING_PROVIDER": "Ollama",
+        "EMBEDDING_PROVIDER": "ollama",
         "EMBEDDING_MODEL": "nomic-embed-text",
         "OLLAMA_HOST": "http://127.0.0.1:11434",
         "MILVUS_TOKEN": "your-zilliz-cloud-api-key"

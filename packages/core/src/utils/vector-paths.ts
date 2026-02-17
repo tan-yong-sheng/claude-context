@@ -35,7 +35,7 @@ export function getVectorDbPath(codebasePath: string): string {
 /**
  * Get the hash for a codebase path
  * @param codebasePath - Absolute path to the codebase
- * @returns 16-character MD5 hash
+ * @returns 8-character MD5 hash
  */
 export function getPathHash(codebasePath: string): string {
     const resolvedPath = path.resolve(codebasePath);
@@ -43,7 +43,7 @@ export function getPathHash(codebasePath: string): string {
         .createHash('md5')
         .update(resolvedPath)
         .digest('hex')
-        .substring(0, 16);
+        .substring(0, 8);
 }
 
 /**

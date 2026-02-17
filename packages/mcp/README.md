@@ -35,8 +35,8 @@ Claude Context MCP supports multiple embedding providers. Choose the one that be
 > 📋 **Quick Reference**: For a complete list of environment variables and their descriptions, see the [Environment Variables Guide](../../docs/getting-started/environment-variables.md).
 
 ```bash
-# Supported providers: OpenAI, VoyageAI, Gemini, Ollama
-EMBEDDING_PROVIDER=OpenAI
+# Supported providers: openai, voyage, gemini, ollama
+EMBEDDING_PROVIDER=openai
 ```
 
 <details>
@@ -276,7 +276,7 @@ Pasting the following configuration into your Cursor `~/.cursor/mcp.json` file i
       "command": "npx",
       "args": ["-y", "@tan-yong-sheng/claude-context-mcp@latest"],
       "env": {
-        "EMBEDDING_PROVIDER": "OpenAI",
+        "EMBEDDING_PROVIDER": "openai",
         "OPENAI_API_KEY": "your-openai-api-key"
       }
     }
@@ -293,7 +293,7 @@ Pasting the following configuration into your Cursor `~/.cursor/mcp.json` file i
       "command": "npx",
       "args": ["-y", "@tan-yong-sheng/claude-context-mcp@latest"],
       "env": {
-        "EMBEDDING_PROVIDER": "VoyageAI",
+        "EMBEDDING_PROVIDER": "voyage",
         "VOYAGEAI_API_KEY": "your-voyageai-api-key",
         "EMBEDDING_MODEL": "voyage-code-3",
               }
@@ -311,7 +311,7 @@ Pasting the following configuration into your Cursor `~/.cursor/mcp.json` file i
       "command": "npx",
       "args": ["-y", "@tan-yong-sheng/claude-context-mcp@latest"],
       "env": {
-        "EMBEDDING_PROVIDER": "Gemini",
+        "EMBEDDING_PROVIDER": "gemini",
         "GEMINI_API_KEY": "your-gemini-api-key",
               }
     }
@@ -328,7 +328,7 @@ Pasting the following configuration into your Cursor `~/.cursor/mcp.json` file i
       "command": "npx",
       "args": ["-y", "@tan-yong-sheng/claude-context-mcp@latest"],
       "env": {
-        "EMBEDDING_PROVIDER": "Ollama",
+        "EMBEDDING_PROVIDER": "ollama",
         "EMBEDDING_MODEL": "nomic-embed-text",
         "OLLAMA_HOST": "http://127.0.0.1:11434",
               }

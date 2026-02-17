@@ -110,42 +110,14 @@ jobs:
     # Remove working-directory default - we need root for workspace
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      # FIX #1: Install dependencies at ROOT for full workspace support
-      # This ensures MCP can resolve workspace:* dependency on core
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # FIX #3: Download full package artifacts
+      # FIX #3: Download full package artifacts FIRST (before any checkout)
+      # This ensures we use the BUILT artifacts, not fresh checkout
       - name: Download core package artifacts
         uses: actions/download-artifact@v4
         with:
@@ -157,6 +129,11 @@ jobs:
         with:
           name: mcp-package
           path: packages/mcp
+
+      - name: Verify dist exists in artifacts
+        run: |
+          ls -la packages/core/dist/ | head -5
+          ls -la packages/mcp/dist/ | head -5
 
       - name: Configure Git
         run: |
@@ -178,10 +155,20 @@ jobs:
           fi
           echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      # FIX #1: Use pnpm --filter for publishing (like release.yml)
-      # This respects the workspace setup and prepublishOnly scripts
+      # Update MCP's dependency on core to use the published version
+      - name: Update MCP core dependency
+        run: |
+          cd packages/mcp
+          CORE_VERSION=$(cd ../core && node -p "require('./package.json').version")
+          # Replace workspace:* with the actual published version
+          sed -i "s/\"@tan-yong-sheng\/claude-context-core\": \"workspace:\*\"/\"@tan-yong-sheng\/claude-context-core\": \"$CORE_VERSION\"/" package.json
+
+      # Publish using npm directly from the artifact directory
+      # This ensures we publish exactly what was built, not a fresh build
       - name: Publish Core to NPM
-        run: pnpm --filter @tan-yong-sheng/claude-context-core publish --tag ${{ inputs.npm_tag }} --access public --no-git-checks
+        run: |
+          cd packages/core
+          npm publish --tag ${{ inputs.npm_tag }} --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -200,17 +187,27 @@ jobs:
           fi
           echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      # FIX #1: Use pnpm --filter for MCP publishing
-      # This ensures workspace:* dependency resolves correctly
+      # Publish using npm directly from the artifact directory
       - name: Publish MCP to NPM
-        run: pnpm --filter @tan-yong-sheng/claude-context-mcp publish --tag ${{ inputs.npm_tag }} --access public --no-git-checks
+        run: |
+          cd packages/mcp
+          npm publish --tag ${{ inputs.npm_tag }} --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Checkout only for git tag creation (minimal)
+      - name: Checkout for git tagging
+        if: inputs.npm_tag == 'latest'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Create Git tag (latest only)
         if: inputs.npm_tag == 'latest'
         run: |
           VERSION=$(node -p "require('./packages/core/package.json').version")
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
           git tag "v${VERSION}"
           git push origin "v${VERSION}"
 

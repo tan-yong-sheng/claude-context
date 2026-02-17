@@ -1,0 +1,190 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-core:
+    name: Test Core Package
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 10
+
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Build core package
+      run: pnpm build:core
+
+    - name: Run core tests with coverage
+      run: |
+        cd packages/core
+        pnpm test:coverage
+
+    - name: Upload core coverage report
+      uses: actions/upload-artifact@v4
+      if: matrix.node-version == '20.x'
+      with:
+        name: core-coverage-report
+        path: packages/core/coverage
+
+  test-mcp:
+    name: Test MCP Package
+    runs-on: ubuntu-latest
+    needs: test-core
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 10
+
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Build packages
+      run: |
+        pnpm build:core
+        pnpm build:mcp
+
+    - name: Run MCP tests with coverage
+      run: |
+        cd packages/mcp
+        pnpm test:coverage
+
+    - name: Upload MCP coverage report
+      uses: actions/upload-artifact@v4
+      if: matrix.node-version == '20.x'
+      with:
+        name: mcp-coverage-report
+        path: packages/mcp/coverage
+
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: [test-core, test-mcp]
+    if: always()
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download core coverage
+      uses: actions/download-artifact@v4
+      with:
+        name: core-coverage-report
+        path: core-coverage
+
+    - name: Download MCP coverage
+      uses: actions/download-artifact@v4
+      with:
+        name: mcp-coverage-report
+        path: mcp-coverage
+
+    - name: Display coverage summary
+      run: |
+        echo "## Core Package Coverage" >> $GITHUB_STEP_SUMMARY
+        if [ -f core-coverage/coverage-summary.json ]; then
+          cat core-coverage/coverage-summary.json | jq -r 'to_entries[] | "- \(.key): \(.value.pct)%"' >> $GITHUB_STEP_SUMMARY
+        else
+          echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## MCP Package Coverage" >> $GITHUB_STEP_SUMMARY
+        if [ -f mcp-coverage/coverage-summary.json ]; then
+          cat mcp-coverage/coverage-summary.json | jq -r 'to_entries[] | "- \(.key): \(.value.pct)%"' >> $GITHUB_STEP_SUMMARY
+        else
+          echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [test-core, test-mcp]
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 10
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Build all packages
+      run: pnpm build
+
+    - name: Run E2E tests
+      run: |
+        cd packages/core
+        pnpm test:e2e
+      continue-on-error: true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 10
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Run linter
+      run: pnpm lint

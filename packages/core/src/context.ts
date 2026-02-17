@@ -94,6 +94,8 @@ export interface ContextConfig {
     ignorePatterns?: string[];
     customExtensions?: string[]; // New: custom extensions from MCP
     customIgnorePatterns?: string[]; // New: custom ignore patterns from MCP
+    embeddingDimension?: number; // New: manual override for embedding dimension
+    embeddingBatchSize?: number; // New: manual override for embedding batch size
 }
 
 export class Context {
@@ -103,8 +105,14 @@ export class Context {
     private supportedExtensions: string[];
     private ignorePatterns: string[];
     private synchronizers = new Map<string, FileSynchronizer>();
+    private configEmbeddingDimension?: number;
+    private configEmbeddingBatchSize?: number;
 
     constructor(config: ContextConfig = {}) {
+        // Store config values for embedding dimension and batch size
+        this.configEmbeddingDimension = config.embeddingDimension;
+        this.configEmbeddingBatchSize = config.embeddingBatchSize;
+
         // Initialize services
         this.embedding = config.embedding || new OpenAIEmbedding({
             apiKey: envManager.get('OPENAI_API_KEY') || 'your-openai-api-key',
@@ -642,9 +650,25 @@ export class Context {
             console.log(`[Context] ✅ Collection ${collectionName} dropped successfully`);
         }
 
-        console.log(`[Context] 🔍 Detecting embedding dimension for ${this.embedding.getProvider()} provider...`);
-        const dimension = await this.embedding.detectDimension();
-        console.log(`[Context] 📏 Detected dimension: ${dimension} for ${this.embedding.getProvider()}`);
+        // Check for manual dimension override (config takes priority over env var)
+        const envDimension = envManager.get('EMBEDDING_DIMENSION');
+        const manualDimension = this.configEmbeddingDimension || (envDimension ? parseInt(envDimension, 10) : undefined);
+        let dimension: number;
+
+        if (manualDimension && !isNaN(manualDimension) && manualDimension > 0) {
+            dimension = manualDimension;
+            const source = this.configEmbeddingDimension ? 'config' : 'EMBEDDING_DIMENSION env var';
+            console.log(`[Context] 📏 Using manually configured dimension: ${dimension} (from ${source})`);
+        } else if (envDimension) {
+            console.warn(`[Context] ⚠️ Invalid EMBEDDING_DIMENSION value: "${envDimension}". Falling back to auto-detection.`);
+            console.log(`[Context] 🔍 Detecting embedding dimension for ${this.embedding.getProvider()} provider...`);
+            dimension = await this.embedding.detectDimension();
+            console.log(`[Context] 📏 Auto-detected dimension: ${dimension} for ${this.embedding.getProvider()}`);
+        } else {
+            console.log(`[Context] 🔍 Detecting embedding dimension for ${this.embedding.getProvider()} provider...`);
+            dimension = await this.embedding.detectDimension();
+            console.log(`[Context] 📏 Detected dimension: ${dimension} for ${this.embedding.getProvider()}`);
+        }
         const dirName = path.basename(codebasePath);
 
         if (isHybrid === true) {
@@ -701,9 +725,13 @@ export class Context {
         onFileProcessed?: (filePath: string, fileIndex: number, totalFiles: number) => void
     ): Promise<{ processedFiles: number; totalChunks: number; status: 'completed' | 'limit_reached' }> {
         const isHybrid = this.getIsHybrid();
-        const EMBEDDING_BATCH_SIZE = Math.max(1, parseInt(envManager.get('EMBEDDING_BATCH_SIZE') || '100', 10));
+        // Check for manual batch size override (config takes priority over env var)
+        const envBatchSize = envManager.get('EMBEDDING_BATCH_SIZE');
+        const manualBatchSize = this.configEmbeddingBatchSize || (envBatchSize ? parseInt(envBatchSize, 10) : undefined);
+        const EMBEDDING_BATCH_SIZE = Math.max(1, manualBatchSize && !isNaN(manualBatchSize) ? manualBatchSize : 100);
         const CHUNK_LIMIT = 450000;
-        console.log(`[Context] 🔧 Using EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE}`);
+        const source = this.configEmbeddingBatchSize ? 'config' : (envBatchSize ? 'EMBEDDING_BATCH_SIZE env var' : 'default');
+        console.log(`[Context] 🔧 Using EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE} (from ${source})`);
 
         let chunkBuffer: Array<{ chunk: CodeChunk; codebasePath: string }> = [];
         let processedFiles = 0;
