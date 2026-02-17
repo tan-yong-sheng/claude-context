@@ -70,10 +70,9 @@ function main() {
     // Build individual packages
     results.push(measureBuildTime('pnpm build:core', 'Build core package'));
     results.push(measureBuildTime('pnpm build:mcp', 'Build MCP package'));
-    results.push(measureBuildTime('pnpm build:vscode', 'Build VSCode extension'));
-    
+
     // Full build
-    results.push(measureBuildTime('pnpm -r --filter="./packages/chrome-extension" build', 'Build Chrome extension'));
+    results.push(measureBuildTime('pnpm build', 'Build all packages'));
     
     const totalTime = results.reduce((sum, result) => sum + result.duration, 0);
     const successCount = results.filter(r => r.success).length;

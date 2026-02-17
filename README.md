@@ -5,7 +5,6 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org/)
 [![Documentation](https://img.shields.io/badge/Documentation-📚-orange.svg)](docs/)
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/zilliz.semanticcodesearch?label=VS%20Code%20Extension&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=zilliz.semanticcodesearch)
 [![npm - core](https://img.shields.io/npm/v/@tan-yong-sheng/claude-context-core?label=%40tan-yong-sheng%2Fclaude-context-core&logo=npm)](https://www.npmjs.com/package/@tan-yong-sheng/claude-context-core)
 [![npm - mcp](https://img.shields.io/npm/v/@tan-yong-sheng/claude-context-mcp?label=%40tan-yong-sheng%2Fclaude-context-mcp&logo=npm)](https://www.npmjs.com/package/@tan-yong-sheng/claude-context-mcp)
 [![Twitter](https://img.shields.io/twitter/url/https/twitter.com/zilliz_universe.svg?style=social&label=Follow%20%40Zilliz)](https://twitter.com/zilliz_universe)
@@ -476,16 +475,6 @@ Get the current indexing status of a codebase. Shows progress percentage for act
 
 ---
 
-## 📊 Evaluation
-
-Our controlled evaluation demonstrates that Claude Context MCP achieves ~40% token reduction under the condition of equivalent retrieval quality. This translates to significant cost and time savings in production environments. This also means that, under the constraint of limited token context length, using Claude Context yields better retrieval and answer results.
-
-![MCP Efficiency Analysis](assets/mcp_efficiency_analysis_chart.png)
-
-For detailed evaluation methodology and results, see the [evaluation directory](evaluation/).
-
----
-
 ## 🏗️ Architecture
 
 ![](assets/Architecture.png)
@@ -504,7 +493,6 @@ For detailed evaluation methodology and results, see the [evaluation directory](
 Claude Context is a monorepo containing three main packages:
 
 - **`@tan-yong-sheng/claude-context-core`**: Core indexing engine with embedding and vector database integration
-- **VSCode Extension**: Semantic Code Search extension for Visual Studio Code
 - **`@tan-yong-sheng/claude-context-mcp`**: Model Context Protocol server for AI agent integration
 
 ### Supported Technologies
@@ -519,7 +507,7 @@ Claude Context is a monorepo containing three main packages:
 
 ## 📦 Other Ways to Use Claude Context
 
-While MCP is the recommended way to use Claude Context with AI assistants, you can also use it directly or through the VSCode extension.
+While MCP is the recommended way to use Claude Context with AI assistants, you can also use it directly via the Core Package.
 
 ### Build Applications with Core Package
 
@@ -557,19 +545,6 @@ results.forEach(result => {
     console.log(`Content: ${result.content.substring(0, 100)}...`);
 });
 ```
-
-### VSCode Extension
-
-Integrates Claude Context directly into your IDE. Provides an intuitive interface for semantic code search and navigation.
-
-1. **Direct Link**: [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=zilliz.semanticcodesearch)
-2. **Manual Search**:
-    - Open Extensions view in VSCode (Ctrl+Shift+X or Cmd+Shift+X on Mac)
-    - Search for "Semantic Code Search"
-    - Click Install
-
-![img](https://lh7-rt.googleusercontent.com/docsz/AD_4nXdtCtT9Qi6o5mGVoxzX50r8Nb6zDFcjvTQR7WZ-xMbEsHEPPhSYAFVJ7q4-rETzxJ8wy1cyZmU8CmtpNhAU8PGOqVnE2kc2HCn1etDg97Qsh7m89kBjG4ZT7XBgO4Dp7BfFZx7eow?key=qYdFquJrLcfXCUndY-YRBQ)
----
 
 ## 🛠️ Development
 
@@ -631,7 +606,6 @@ pnpm build
 
 # Build specific package
 pnpm build:core
-pnpm build:vscode
 pnpm build:mcp
 
 # Performance benchmarking
@@ -686,8 +660,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 **Package-specific contributing guides:**
 
 - [Core Package Contributing](packages/core/CONTRIBUTING.md)
-- [MCP Server Contributing](packages/mcp/CONTRIBUTING.md)  
-- [VSCode Extension Contributing](packages/vscode-extension/CONTRIBUTING.md)
+- [MCP Server Contributing](packages/mcp/CONTRIBUTING.md)
 
 ---
 
@@ -698,7 +671,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - [ ] Agent-based interactive search mode
 - [x] Enhanced code chunking strategies
 - [ ] Search result ranking optimization
-- [ ] Robust Chrome Extension
 
 ---
 
@@ -711,5 +683,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔗 Links
 
 - [GitHub Repository](https://github.com/tan-yong-sheng/claude-context)
-- [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=zilliz.semanticcodesearch)
 - [sqlite-vec](https://github.com/asg017/sqlite-vec) - SQLite extension for vector search

@@ -40,11 +40,6 @@ Before setting up Claude Context, ensure you have the following requirements met
 
 ## Development Tools (Optional)
 
-### For VSCode Extension
-- **VSCode**: Version 1.74.0 or higher
-- **Extensions**: Claude Context extension from marketplace
-
-
 ### For Development Contributions
 - **Git**: For version control
 - **pnpm**: Package manager (preferred over npm)

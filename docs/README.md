@@ -13,7 +13,6 @@ Welcome to the Claude Context documentation! Claude Context is a powerful tool t
 
 ### Components
 - [MCP Server](../packages/mcp/README.md) - The MCP server of Claude Context
-- [VSCode Extension](../packages/vscode-extension/README.md) - The VSCode extension of Claude Context
 - [Core Package](../packages/core/README.md) - The core package of Claude Context
 
 ### Dive Deep
@@ -27,7 +26,6 @@ Welcome to the Claude Context documentation! Claude Context is a powerful tool t
 ## 🔗 External Resources
 
 - [GitHub Repository](https://github.com/zilliztech/claude-context)
-- [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=zilliz.semanticcodesearch)
 - [npm - Core Package](https://www.npmjs.com/package/@zilliz/claude-context-core)
 - [npm - MCP Server](https://www.npmjs.com/package/@zilliz/claude-context-mcp)
 - [Zilliz Cloud](https://cloud.zilliz.com)

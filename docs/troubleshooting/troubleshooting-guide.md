@@ -2,9 +2,6 @@
 
 When you encounter errors or issues with Claude Context, don't panic! This guide provides a systematic approach to identify and resolve problems.
 
-- For MCP use cases, see [MCP Use Cases](#for-mcp-use-cases) section.
-- For VSCode Extension use cases, see [VSCode Extension Use Cases](#for-vscode-extension-use-cases) section.
-
 ## For MCP Use Cases
 
 ### Step 1: Check Indexing Status First
@@ -90,39 +87,3 @@ If the offical version of Claude Context has been updated, try reconnecting to t
 - **Cursor and other GUI IDEs**: Use the toggle icon or restart button
 
 After reconnecting, test your use case again to see if the update resolved any previous issues or if new functionality is working as expected.
-
-## For VSCode Extension Use Cases
-
-### Step 1: Get Debug Logs
-
-**Get your logs:**
-- In the global search panel, type `> Toggle Developer Tools`
-- Open the Chrome DevTools window to view logs
-- See [VSCode Developer Tools guide](https://stackoverflow.com/questions/30765782/what-is-the-use-of-the-developer-tools-in-vs-code) for details
-
-**Report your settings:**
-- Include extension settings from the panel if possible
-- This information helps locate configuration issues
-
-### Step 2: Search Documentation and Community
-
-If debug logs don't solve the issue, search existing resources:
-
-1. **Check Documentation:**
-   - [Main Documentation](../README.md) - General usage and setup
-
-2. **Check FAQ:**
-   - [Troubleshooting FAQ](./faq.md) - Common issues and solutions
-
-3. **Search GitHub Issues:**
-   - [GitHub Issues](https://github.com/zilliztech/claude-context/issues) - Known issues and discussions
-   - Search for similar problems and solutions
-   - Check both open and closed issues
-
-### Step 3: Report the Issue
-
-If none of the above steps resolve your problem, please [create a GitHub issue](https://github.com/zilliztech/claude-context/issues/new/choose).
-
-### Step 4: After Version Updates
-
-If the offical version of VSCode Extension has been updated, try reinstalling the extension.

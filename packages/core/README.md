@@ -381,7 +381,6 @@ This package is part of the Claude Context monorepo. Please see:
 ## Related Packages
 
 - **[@claude-context/mcp](../mcp)** - MCP server that uses this core engine
-- **[VSCode Extension](../vscode-extension)** - VSCode extension built on this core
 
 
 ## License

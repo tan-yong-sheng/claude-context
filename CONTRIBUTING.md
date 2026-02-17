@@ -61,7 +61,6 @@ Thank you for your interest in contributing to Claude Context! This guide will h
 claude-context/
 ├── packages/
 │   ├── core/              # Core indexing engine
-│   ├── vscode-extension/  # VSCode extension
 │   └── mcp/              # Model Context Protocol server
 ├── examples/
 │   └── basic-usage/      # Basic usage example 
@@ -72,7 +71,6 @@ claude-context/
 Each package has its own development guide with specific instructions:
 
 - **[Core Package](packages/core/CONTRIBUTING.md)** - Develop the core indexing engine
-- **[VSCode Extension](packages/vscode-extension/CONTRIBUTING.md)** - Develop the VSCode extension
 - **[MCP Server](packages/mcp/CONTRIBUTING.md)** - Develop the MCP protocol server
 
 ## 🛠️ Development Workflow
@@ -95,7 +93,6 @@ pnpm dev
 For detailed development instructions for each package, see:
 
 - [Core Package Development](packages/core/CONTRIBUTING.md)
-- [VSCode Extension Development](packages/vscode-extension/CONTRIBUTING.md)
 - [MCP Server Development](packages/mcp/CONTRIBUTING.md)
 
 ## 📝 Making Changes
@@ -108,14 +105,14 @@ We follow conventional commit format:
 type(scope): description
 
 feat(core): add new embedding provider
-fix(vscode): resolve search result display issue
+fix(mcp): improve error handling
 docs(readme): update installation instructions
 refactor(mcp): improve error handling
 ```
 
 **Types**: `feat`, `fix`, `docs`, `refactor`, `perf`, `chore`
 
-**Scopes**: `core`, `vscode`, `mcp`, `examples`, `docs`
+**Scopes**: `core`, `mcp`, `examples`, `docs`
 
 ### Pull Request Process
 

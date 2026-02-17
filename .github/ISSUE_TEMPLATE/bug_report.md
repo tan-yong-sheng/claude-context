@@ -21,13 +21,6 @@ Try to follow the [Troubleshooting Guide](https://github.com/zilliztech/claude-c
 **What's your MCP Client Setting**
 Suppose you can not solve the problem from the logs. You can report which MCP client you use, and the setting JSON contents. This information will be helpful to locate the issue.
 
-## For vscode-extension Use Cases
-**Get your logs first**
-In the global search panel, type `> Toggle Developer Tools` to open the Chrome DevTools window to get the logs. See https://stackoverflow.com/questions/30765782/what-is-the-use-of-the-developer-tools-in-vs-code to get more details.
-
-**Report your issue**
-Suppose you can not solve the problem from the logs. You can report the settings in the panel if possible. This information will be helpful to locate the issue.
-
 ## For Other Cases
 Try to locate the issue and provide more detailed setting information.
 
