@@ -96,6 +96,15 @@ export interface ContextConfig {
     customIgnorePatterns?: string[]; // New: custom ignore patterns from MCP
     embeddingDimension?: number; // New: manual override for embedding dimension
     embeddingBatchSize?: number; // New: manual override for embedding batch size
+    // MCP-specific configuration properties
+    embeddingProvider?: string;
+    embeddingModel?: string;
+    openaiApiKey?: string;
+    openaiBaseUrl?: string;
+    voyageaiApiKey?: string;
+    geminiApiKey?: string;
+    geminiBaseUrl?: string;
+    ollamaHost?: string;
 }
 
 export class Context {
