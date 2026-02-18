@@ -1,0 +1,66 @@
+# Build artifacts
+out/
+dist/*.map
+dist/*.LICENSE.txt
+node_modules/
+
+# Source files
+src/
+*.ts
+*.cts
+*.mts
+tsconfig.json
+tsconfig.*.json
+webpack.config.js
+
+# Development files
+.vscode/
+.github/
+.gitignore
+.gitattributes
+.eslintrc.js
+.eslintrc.json
+.eslintignore
+.prettierrc
+.prettierignore
+
+# Test files
+test/
+tests/
+test-fixtures/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+.vscode-test.js
+.vscode-test/
+
+# Documentation (keep README.md)
+*.md
+!README.md
+CHANGELOG.md
+CONTRIBUTING.md
+
+# Other config files
+.env
+.env.*
+*.log
+.DS_Store
+.npmrc
+.editorconfig
+.nvmrc
+
+# Scripts
+ copy-assets.js
+*.config.js
+
+# Package manager lock files (already handled by vsce)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Source WASM files (already copied to dist/wasm)
+wasm/
+
+# License file (not needed at runtime, though vsce may include it anyway)
+# LICENSE

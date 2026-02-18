@@ -21,7 +21,9 @@ module.exports = {
     },
     devtool: 'nosources-source-map',
     externals: {
-        vscode: 'commonjs vscode' // the vscode-module is created on-the-fly and must be excluded
+        vscode: 'commonjs vscode', // the vscode-module is created on-the-fly and must be excluded
+        // Externalize native modules to prevent webpack bundling issues
+        'better-sqlite3': 'commonjs better-sqlite3'
     },
     resolve: {
         // support reading TypeScript and JavaScript files
@@ -31,6 +33,12 @@ module.exports = {
             '@tan-yong-sheng/code-context-core/dist/splitter': path.resolve(__dirname, '../core/dist/splitter'),
             '@tan-yong-sheng/code-context-core/dist/embedding': path.resolve(__dirname, '../core/dist/embedding'),
             '@tan-yong-sheng/code-context-core/dist/vectordb': path.resolve(__dirname, '../core/dist/vectordb')
+        },
+        // Fallback for optional ws dependencies (bufferutil and utf-8-validate)
+        // These are native addons that ws uses for performance, but falls back to JS if not available
+        fallback: {
+            bufferutil: false,
+            'utf-8-validate': false
         }
     },
     module: {
@@ -64,6 +72,15 @@ module.exports = {
     experiments: {
         asyncWebAssembly: true
     },
+    // Ignore warnings that are expected and don't affect functionality
+    ignoreWarnings: [
+        // Ignore the bindings warning from better-sqlite3 - it uses dynamic require
+        // which webpack cannot statically analyze, but it works at runtime
+        { module: /bindings\/bindings\.js/ },
+        // Ignore warnings from ws optional dependencies
+        { module: /ws\/lib\/buffer-util\.js/ },
+        { module: /ws\/lib\/validation\.js/ }
+    ],
     plugins: [
         // Ignore only native tree-sitter modules that cause issues in VSCode extension context
         // but allow web-tree-sitter to be bundled
