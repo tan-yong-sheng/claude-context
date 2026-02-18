@@ -4,6 +4,7 @@
     "description": "A powerful code indexing tool with multi-platform support",
     "private": true,
     "scripts": {
+        "postinstall": "npm rebuild better-sqlite3",
         "build": "pnpm -r --filter='!./examples/*' build && pnpm -r --filter='./examples/*' build",
         "build:core": "pnpm --filter @tan-yong-sheng/code-context-core build",
         "build:mcp": "pnpm --filter @tan-yong-sheng/code-context-mcp build",
@@ -17,7 +18,8 @@
         "release:core": "pnpm --filter @tan-yong-sheng/code-context-core... run build && pnpm --filter @tan-yong-sheng/code-context-core publish --access public --no-git-checks",
         "release:mcp": "pnpm --filter @tan-yong-sheng/code-context-mcp... run build && pnpm --filter @tan-yong-sheng/code-context-mcp publish --access public --no-git-checks",
         "example:basic": "pnpm --filter code-context-basic-example start",
-        "benchmark": "node scripts/build-benchmark.js"
+        "benchmark": "node scripts/build-benchmark.js",
+        "test": "pnpm --filter @tan-yong-sheng/code-context-core test && pnpm --filter @tan-yong-sheng/code-context-mcp test"
     },
     "devDependencies": {
         "@types/jest": "^30.0.0",
