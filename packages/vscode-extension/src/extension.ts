@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as os from 'os';
 import { SemanticSearchViewProvider } from './webview/semanticSearchProvider';
 
 import { SearchCommand } from './commands/searchCommand';
 import { IndexCommand } from './commands/indexCommand';
 import { SyncCommand } from './commands/syncCommand';
 import { ConfigManager } from './config/configManager';
-import { Context, OpenAIEmbedding, VoyageAIEmbedding, GeminiEmbedding, SqliteVecVectorDatabase, AstCodeSplitter, LangChainCodeSplitter, SplitterType } from '@tan-yong-sheng/code-context-core';
-import { envManager, SqliteVecConfig } from '@tan-yong-sheng/code-context-core';
+import { Context, SqliteVecVectorDatabase, AstCodeSplitter, LangChainCodeSplitter, SplitterType } from '@tan-yong-sheng/code-context-core';
+import { envManager } from '@tan-yong-sheng/code-context-core';
 import { getLogger } from './utils/logger';
 
 let semanticSearchProvider: SemanticSearchViewProvider;
@@ -236,18 +238,13 @@ function createContextWithConfig(configManager: ConfigManager): Context {
         }
 
         // Create vector database instance
-        if (vectorDbConfig) {
-            logger.debug('Creating vector database instance...');
-            vectorDatabase = new SqliteVecVectorDatabase(vectorDbConfig);
-            logger.info(`Vector database initialized with sqlite-vec (dbPath: ${vectorDbConfig.dbPath})`);
-            contextConfig.vectorDatabase = vectorDatabase;
-        } else {
-            logger.debug('Using default vector database configuration');
-            vectorDatabase = new SqliteVecVectorDatabase({
-                dbPath: envManager.get('VECTOR_DB_PATH') || undefined
-            });
-            contextConfig.vectorDatabase = vectorDatabase;
-        }
+        const defaultDbPath = path.join(os.homedir(), '.code-context', 'vectors');
+        const dbPath = vectorDbConfig?.dbPath || envManager.get('VECTOR_DB_PATH') || defaultDbPath;
+
+        logger.debug('Creating vector database instance...');
+        vectorDatabase = new SqliteVecVectorDatabase({ dbPath });
+        logger.info(`Vector database initialized with sqlite-vec (dbPath: ${dbPath})`);
+        contextConfig.vectorDatabase = vectorDatabase;
 
         // Create splitter instance
         let codeSplitter;
