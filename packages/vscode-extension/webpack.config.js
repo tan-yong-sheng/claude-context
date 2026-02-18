@@ -21,9 +21,7 @@ module.exports = {
     },
     devtool: 'nosources-source-map',
     externals: {
-        vscode: 'commonjs vscode', // the vscode-module is created on-the-fly and must be excluded
-        // Externalize native modules to prevent webpack bundling issues
-        'better-sqlite3': 'commonjs better-sqlite3'
+        vscode: 'commonjs vscode' // the vscode-module is created on-the-fly and must be excluded
     },
     resolve: {
         // support reading TypeScript and JavaScript files
