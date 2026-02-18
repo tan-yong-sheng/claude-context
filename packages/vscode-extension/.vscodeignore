@@ -5,13 +5,18 @@ dist/*.LICENSE.txt
 node_modules/
 
 # Source files
-src/
+src/**/*.ts
+src/**/*.cts
+src/**/*.mts
 *.ts
 *.cts
 *.mts
 tsconfig.json
 tsconfig.*.json
 webpack.config.js
+
+# Keep HTML templates (needed for webview)
+!src/webview/templates/
 
 # Development files
 .vscode/
