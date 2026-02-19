@@ -50,8 +50,18 @@ describe('SnapshotManager', () => {
             });
         });
 
-        it.skip('should update indexing progress', () => {
-            // Skipped - requires complex mock setup
+        it('should update indexing progress', () => {
+            // Set codebase to indexing first
+            snapshotManager.setCodebaseIndexing('/test/path', 0);
+
+            // Update progress using the deprecated method
+            snapshotManager.updateIndexingProgress('/test/path', 50);
+
+            const info = snapshotManager.getCodebaseInfo('/test/path');
+            expect(info).toMatchObject({
+                status: 'indexing',
+                indexingPercentage: 50
+            });
         });
 
         it('should set codebase to indexed status with stats', () => {
@@ -84,8 +94,16 @@ describe('SnapshotManager', () => {
             });
         });
 
-        it.skip('should remove codebase from indexed list', () => {
-            // Skipped - requires complex mock setup
+        it('should remove codebase from indexed list', () => {
+            // Add a codebase to indexed list
+            snapshotManager.setCodebaseIndexed('/test/path', { indexedFiles: 10, totalChunks: 50, status: 'completed' });
+            expect(snapshotManager.getCodebaseStatus('/test/path')).toBe('indexed');
+
+            // Remove using the deprecated method
+            snapshotManager.removeIndexedCodebase('/test/path');
+
+            expect(snapshotManager.getCodebaseStatus('/test/path')).toBe('not_found');
+            expect(snapshotManager.getIndexedCodebases()).not.toContain('/test/path');
         });
 
         it('should completely remove codebase from snapshot', () => {
@@ -98,8 +116,13 @@ describe('SnapshotManager', () => {
             expect(snapshotManager.getIndexedCodebases()).not.toContain('/test/path');
         });
 
-        it.skip('should return not_found for unknown codebase', () => {
-            // Skipped - requires complex mock setup
+        it('should return not_found for unknown codebase', () => {
+            // Don't add any codebase - check status of unknown path
+            const status = snapshotManager.getCodebaseStatus('/unknown/path');
+            expect(status).toBe('not_found');
+
+            const info = snapshotManager.getCodebaseInfo('/unknown/path');
+            expect(info).toBeUndefined();
         });
     });
 
@@ -127,8 +150,41 @@ describe('SnapshotManager', () => {
             expect(indexing).toContain('/indexing/path');
         });
 
-        it.skip('should validate V1 codebases exist on filesystem', () => {
-            // Skipped - requires complex mock setup
+        it('should validate V1 codebases exist on filesystem', () => {
+            const v1Snapshot = {
+                indexedCodebases: ['/existing/path', '/nonexistent/path'],
+                indexingCodebases: [],
+                formatVersion: 'v1',
+                lastUpdated: '2024-01-01T00:00:00.000Z'
+            };
+
+            // Mock: existing path returns true, nonexistent returns false
+            mockedFs.existsSync.mockImplementation((p: any) => {
+                const pathStr = p.toString();
+                // Return true for snapshot file and existing path
+                if (pathStr.includes('mcp-codebase-snapshot.json')) return true;
+                return pathStr.includes('/existing/path');
+            });
+            mockedFs.readFileSync.mockReturnValue(JSON.stringify(v1Snapshot));
+
+            // Create new instance to trigger load
+            const manager = new SnapshotManager();
+
+            // After load, saveCodebaseSnapshot is called which creates a v2 snapshot
+            // We need to mock the file read for getIndexedCodebases
+            const v2Snapshot = {
+                formatVersion: 'v2',
+                codebases: {
+                    '/existing/path': { status: 'indexed', indexedFiles: 0, totalChunks: 0, indexStatus: 'completed', lastUpdated: '2024-01-01T00:00:00.000Z' }
+                },
+                lastUpdated: '2024-01-01T00:00:00.000Z'
+            };
+            mockedFs.readFileSync.mockReturnValue(JSON.stringify(v2Snapshot));
+
+            // Should only include existing path
+            const codebases = manager.getIndexedCodebases();
+            expect(codebases).toContain('/existing/path');
+            expect(codebases).not.toContain('/nonexistent/path');
         });
 
         it('should save in V2 format', () => {
@@ -206,16 +262,79 @@ describe('SnapshotManager', () => {
     });
 
     describe('Multiple Codebases', () => {
-        it.skip('should track multiple indexed codebases', () => {
-            // Skipped - requires complex mock setup
+        it('should track multiple indexed codebases', () => {
+            // Add multiple indexed codebases
+            snapshotManager.setCodebaseIndexed('/path/one', { indexedFiles: 10, totalChunks: 50, status: 'completed' });
+            snapshotManager.setCodebaseIndexed('/path/two', { indexedFiles: 20, totalChunks: 100, status: 'completed' });
+            snapshotManager.setCodebaseIndexed('/path/three', { indexedFiles: 30, totalChunks: 150, status: 'completed' });
+
+            // Save to trigger write
+            snapshotManager.saveCodebaseSnapshot();
+
+            // Mock the file read to return the saved snapshot
+            const writeCall = mockedFs.writeFileSync.mock.calls[0];
+            const savedData = writeCall[1] as string;
+            mockedFs.existsSync.mockReturnValue(true);
+            mockedFs.readFileSync.mockReturnValue(savedData);
+
+            const codebases = snapshotManager.getIndexedCodebases();
+            expect(codebases).toHaveLength(3);
+            expect(codebases).toContain('/path/one');
+            expect(codebases).toContain('/path/two');
+            expect(codebases).toContain('/path/three');
         });
 
-        it.skip('should track both indexed and indexing codebases separately', () => {
-            // Skipped - requires complex mock setup
+        it('should track both indexed and indexing codebases separately', () => {
+            // Add indexed codebases
+            snapshotManager.setCodebaseIndexed('/indexed/one', { indexedFiles: 10, totalChunks: 50, status: 'completed' });
+            snapshotManager.setCodebaseIndexed('/indexed/two', { indexedFiles: 20, totalChunks: 100, status: 'completed' });
+
+            // Add indexing codebases
+            snapshotManager.setCodebaseIndexing('/indexing/one', 25);
+            snapshotManager.setCodebaseIndexing('/indexing/two', 75);
+
+            // Save to trigger write
+            snapshotManager.saveCodebaseSnapshot();
+
+            // Mock the file read to return the saved snapshot
+            const writeCall = mockedFs.writeFileSync.mock.calls[0];
+            const savedData = writeCall[1] as string;
+            mockedFs.existsSync.mockReturnValue(true);
+            mockedFs.readFileSync.mockReturnValue(savedData);
+
+            const indexedCodebases = snapshotManager.getIndexedCodebases();
+            const indexingCodebases = snapshotManager.getIndexingCodebases();
+
+            // Indexed should contain only indexed paths
+            expect(indexedCodebases).toHaveLength(2);
+            expect(indexedCodebases).toContain('/indexed/one');
+            expect(indexedCodebases).toContain('/indexed/two');
+
+            // Indexing should contain only indexing paths
+            expect(indexingCodebases).toHaveLength(2);
+            expect(indexingCodebases).toContain('/indexing/one');
+            expect(indexingCodebases).toContain('/indexing/two');
         });
 
-        it.skip('should move codebase from indexing to indexed', () => {
-            // Skipped - requires complex mock setup for file system
+        it('should move codebase from indexing to indexed', () => {
+            // Start with indexing
+            snapshotManager.setCodebaseIndexing('/test/path', 50);
+            expect(snapshotManager.getCodebaseStatus('/test/path')).toBe('indexing');
+
+            // Move to indexed using the deprecated method
+            snapshotManager.moveFromIndexingToIndexed('/test/path', 100);
+
+            // Save and mock file read
+            snapshotManager.saveCodebaseSnapshot();
+            const writeCall = mockedFs.writeFileSync.mock.calls[0];
+            const savedData = writeCall[1] as string;
+            mockedFs.existsSync.mockReturnValue(true);
+            mockedFs.readFileSync.mockReturnValue(savedData);
+
+            expect(snapshotManager.getCodebaseStatus('/test/path')).toBe('indexed');
+            expect(snapshotManager.getIndexingCodebases()).not.toContain('/test/path');
+            expect(snapshotManager.getIndexedCodebases()).toContain('/test/path');
+            expect(snapshotManager.getIndexedFileCount('/test/path')).toBe(100);
         });
     });
 
