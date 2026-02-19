@@ -9,7 +9,7 @@ SQLITE_SRC_FILES = sqlite-src/sqlite3.c sqlite-src/sqlite3.h
 # sqlite-vec version
 SQLITE_VEC_VERSION = 0.1.7-alpha.10
 SQLITE_VEC_URL = https://raw.githubusercontent.com/asg017/sqlite-vec/v$(SQLITE_VEC_VERSION)/sqlite-vec.c
-SQLITE_VEC_H_URL = https://raw.githubusercontent.com/asg017/sqlite-vec/v$(SQLITE_VEC_VERSION)/sqlite-vec.h
+SQLITE_VEC_H_TMPL_URL = https://raw.githubusercontent.com/asg017/sqlite-vec/v$(SQLITE_VEC_VERSION)/sqlite-vec.h.tmpl
 SQLITE_VEC_SRC_FILES = sqlite-vec-src/sqlite-vec.c sqlite-vec-src/sqlite-vec.h
 
 # Source files from node-sqlite3-wasm
@@ -80,11 +80,19 @@ $(SQLITE_SRC_FILES):
 	unzip -ojDD sqlite-src/sqlite.zip "*/sqlite3.c" "*/sqlite3.h" -d sqlite-src/ 2>/dev/null || true
 	rm -f sqlite-src/sqlite.zip
 
-# Download sqlite-vec source
+# Download sqlite-vec source and generate header from template
 $(SQLITE_VEC_SRC_FILES):
 	mkdir -p sqlite-vec-src
 	curl -LsSf '$(SQLITE_VEC_URL)' -o sqlite-vec-src/sqlite-vec.c
-	curl -LsSf '$(SQLITE_VEC_H_URL)' -o sqlite-vec-src/sqlite-vec.h
+	curl -LsSf '$(SQLITE_VEC_H_TMPL_URL)' -o sqlite-vec-src/sqlite-vec.h.tmpl
+	# Generate sqlite-vec.h from template
+	sed -e 's/$${VERSION}/$(SQLITE_VEC_VERSION)/g' \
+	    -e 's/$${DATE}/2025-01-01/g' \
+	    -e 's/$${SOURCE}/https:\/\/github.com\/asg017\/sqlite-vec/g' \
+	    -e 's/$${VERSION_MAJOR}/0/g' \
+	    -e 's/$${VERSION_MINOR}/1/g' \
+	    -e 's/$${VERSION_PATCH}/7/g' \
+	    sqlite-vec-src/sqlite-vec.h.tmpl > sqlite-vec-src/sqlite-vec.h
 
 # Compile SQLite with sqlite-vec
 build/sqlite3.o: $(SQLITE_SRC_FILES) $(SQLITE_VEC_SRC_FILES) $(SRC_DIR)/sqlite3-vec-amalgamation.c
