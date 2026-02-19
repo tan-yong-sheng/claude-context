@@ -1,0 +1,134 @@
+# =============================================================================
+# Workflow: Build sqlite-vec-wasm-node
+# =============================================================================
+#
+# Purpose:
+#   Builds the WASM module for @tan-yong-sheng/sqlite-vec-wasm-node package.
+#   This module combines SQLite + sqlite-vec compiled to WebAssembly with
+#   Node.js file system VFS for persistent storage.
+#
+# Triggers:
+#   - workflow_dispatch (manual)
+#   - push to packages/sqlite-vec-wasm-node/**
+#   - pull_request to packages/sqlite-vec-wasm-node/**
+#
+# The WASM build requires Emscripten SDK and produces:
+#   - dist/sqlite-vec-wasm-node.js
+#   - dist/sqlite-vec-wasm-node.wasm
+# =============================================================================
+
+name: Build sqlite-vec-wasm-node
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'packages/sqlite-vec-wasm-node/**'
+  pull_request:
+    paths:
+      - 'packages/sqlite-vec-wasm-node/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '3.1.51'
+
+      - name: Verify Emscripten
+        run: emcc -v
+
+      - name: Download sources
+        working-directory: packages/sqlite-vec-wasm-node
+        run: make download
+
+      - name: Build WASM
+        working-directory: packages/sqlite-vec-wasm-node
+        run: make
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-vec-wasm-node
+          path: |
+            packages/sqlite-vec-wasm-node/dist/
+          retention-days: 7
+
+      - name: Test WASM module
+        working-directory: packages/sqlite-vec-wasm-node
+        run: |
+          node -e "
+            const { Database } = require('./dist/sqlite-vec-wasm-node.js');
+            const db = new Database(':memory:');
+            const v = db.get('SELECT sqlite_version() as s, vec_version() as v');
+            console.log('SQLite:', v.s);
+            console.log('sqlite-vec:', v.v);
+
+            // Test vec0 table
+            db.exec('CREATE VIRTUAL TABLE test USING vec0(embedding FLOAT[4])');
+            const emb = new Float32Array([0.1, 0.2, 0.3, 0.4]);
+            db.run('INSERT INTO test(rowid, embedding) VALUES (?, ?)', [1, emb.buffer]);
+
+            const query = new Float32Array([0.1, 0.2, 0.3, 0.4]);
+            const results = db.all('SELECT rowid, vec_distance_cosine(embedding, ?) as d FROM test ORDER BY d', [query.buffer]);
+            console.log('Vector search result:', results);
+
+            db.close();
+            console.log('Test passed!');
+          "
+
+      - name: Test file persistence
+        working-directory: packages/sqlite-vec-wasm-node
+        run: |
+          node -e "
+            const { Database } = require('./dist/sqlite-vec-wasm-node.js');
+            const fs = require('fs');
+
+            // Create and write
+            const db1 = new Database('/tmp/test-persist.db');
+            db1.exec('CREATE TABLE test (id INTEGER, name TEXT)');
+            db1.run('INSERT INTO test VALUES (?, ?)', [1, 'hello']);
+            db1.close();
+
+            // Reopen and read
+            const db2 = new Database('/tmp/test-persist.db');
+            const row = db2.get('SELECT * FROM test WHERE id = ?', [1]);
+            console.log('Persisted data:', row);
+            db2.close();
+
+            if (row.name === 'hello') {
+              console.log('Persistence test passed!');
+            } else {
+              throw new Error('Persistence test failed');
+            }
+          "
+
+  # Commit the built WASM files back to the repo
+  commit-build:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sqlite-vec-wasm-node
+          path: packages/sqlite-vec-wasm-node/dist/
+
+      - name: Commit built WASM
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add packages/sqlite-vec-wasm-node/dist/
+          git diff --quiet && git diff --staged --quiet || git commit -m "build: update sqlite-vec-wasm-node WASM binaries"
+          git push
