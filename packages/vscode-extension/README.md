@@ -61,7 +61,7 @@ Configure how your code is split into chunks for indexing.
 
 > **Recommendation**: Use AST Splitter for better semantic understanding of code structure.
 
-#### Vector Database Configuration (Optional)
+#### Vector Database Configuration
 Code Context uses sqlite-vec for local vector storage by default. The database is stored at `~/.code-context/vectors/`.
 
 You can optionally configure a custom path:

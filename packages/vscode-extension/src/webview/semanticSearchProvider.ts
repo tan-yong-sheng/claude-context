@@ -265,24 +265,26 @@ export class SemanticSearchViewProvider implements vscode.WebviewViewProvider {
         const config = this.configManager.getEmbeddingProviderConfig();
         const vectorDbConfig = this.configManager.getVectorDbConfig();
         const splitterConfig = this.configManager.getSplitterConfig();
-        const advancedConfig = this.configManager.getAdvancedConfig();
         const supportedProviders = ConfigManager.getSupportedProviders();
 
         this.logger.logConfig({
             provider: config?.provider,
             model: config?.config?.model,
             splitterType: splitterConfig?.type,
-            embeddingDimension: advancedConfig.embeddingDimension,
-            embeddingBatchSize: advancedConfig.embeddingBatchSize
+            embeddingDimension: (config?.config as any)?.embeddingDimension,
+            embeddingBatchSize: (config?.config as any)?.embeddingBatchSize
         });
+
+        // Get advanced config
+        const advancedConfig = this.configManager.getAdvancedConfig();
 
         webview.postMessage({
             command: 'configData',
             config: config,
             vectorDbConfig: vectorDbConfig,
             splitterConfig: splitterConfig,
-            advancedConfig: advancedConfig,
-            supportedProviders: supportedProviders
+            supportedProviders: supportedProviders,
+            advancedConfig: advancedConfig
         });
 
         this.logger.exit('SemanticSearchViewProvider.sendCurrentConfig');
@@ -317,6 +319,7 @@ export class SemanticSearchViewProvider implements vscode.WebviewViewProvider {
                 this.logger.debug('Saving advanced config...');
                 await this.configManager.saveAdvancedConfig(configData.advancedConfig);
             }
+
 
             // Add a small delay to ensure configuration is fully saved
             await new Promise(resolve => setTimeout(resolve, 100));

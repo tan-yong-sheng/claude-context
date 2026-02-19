@@ -1,15 +1,22 @@
 import * as vscode from 'vscode';
 import { Context } from '@tan-yong-sheng/code-context-core';
-import * as path from 'path';
 import { getLogger } from '../utils/logger';
 
 export class IndexCommand {
     private context: Context;
     private logger = getLogger();
+    private isIndexing: boolean = false;
 
     constructor(context: Context) {
         this.context = context;
         this.logger.debug('IndexCommand instance created');
+    }
+
+    /**
+     * Check if indexing is currently in progress
+     */
+    getIsIndexing(): boolean {
+        return this.isIndexing;
     }
 
     /**
@@ -22,6 +29,13 @@ export class IndexCommand {
 
     async execute(): Promise<void> {
         this.logger.enter('IndexCommand.execute');
+
+        // Prevent concurrent indexing operations
+        if (this.isIndexing) {
+            this.logger.warn('Indexing already in progress, ignoring duplicate request');
+            vscode.window.showWarningMessage('Indexing is already in progress. Please wait for it to complete.');
+            return;
+        }
 
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -54,16 +68,38 @@ export class IndexCommand {
 
         this.logger.info(`Selected folder: ${selectedFolder.uri.fsPath}`);
 
-        const confirm = await vscode.window.showInformationMessage(
-            `Index codebase at: ${selectedFolder.uri.fsPath}?\n\nThis will create embeddings for all supported code files.`,
-            'Yes',
-            'Cancel'
-        );
+        // Check if already indexed (MCP-style deduplication)
+        const hasExistingIndex = await this.context.hasIndex(selectedFolder.uri.fsPath);
 
-        if (confirm !== 'Yes') {
-            this.logger.info('User cancelled indexing confirmation');
-            return;
+        if (hasExistingIndex) {
+            this.logger.info('Codebase is already indexed, prompting for force reindex');
+            const reindexConfirm = await vscode.window.showWarningMessage(
+                `Codebase '${selectedFolder.uri.fsPath}' is already indexed.\n\nDo you want to force re-index and overwrite the existing index?`,
+                { modal: true },
+                'Force Re-index',
+                'Cancel'
+            );
+
+            if (reindexConfirm !== 'Force Re-index') {
+                this.logger.info('User cancelled force reindex');
+                return;
+            }
+
+            this.logger.info('Force reindex confirmed by user');
+        } else {
+            const confirm = await vscode.window.showInformationMessage(
+                `Index codebase at: ${selectedFolder.uri.fsPath}?\n\nThis will create embeddings for all supported code files.`,
+                'Yes',
+                'Cancel'
+            );
+
+            if (confirm !== 'Yes') {
+                this.logger.info('User cancelled indexing confirmation');
+                return;
+            }
         }
+
+        this.isIndexing = true;
 
         try {
             let indexStats: { indexedFiles: number; totalChunks: number; status: 'completed' | 'limit_reached' } | undefined;
@@ -90,21 +126,6 @@ export class IndexCommand {
                 );
                 this.logger.info('Existing index cleared');
 
-                // Initialize file synchronizer
-                progress.report({ increment: 0, message: 'Initializing file synchronizer...' });
-                this.logger.debug('Initializing FileSynchronizer...');
-                const { FileSynchronizer } = await import("@tan-yong-sheng/code-context-core");
-                const synchronizer = new FileSynchronizer(selectedFolder.uri.fsPath, this.context.getIgnorePatterns() || []);
-                await synchronizer.initialize();
-                this.logger.info('FileSynchronizer initialized');
-
-                // Store synchronizer in the context's internal map using the collection name from context
-                this.logger.debug('Getting prepared collection...');
-                await this.context.getPreparedCollection(selectedFolder.uri.fsPath);
-                const collectionName = this.context.getCollectionName(selectedFolder.uri.fsPath);
-                this.context.setSynchronizer(collectionName, synchronizer);
-                this.logger.info(`Collection prepared: ${collectionName}`);
-
                 // Start indexing with progress callback
                 this.logger.section('RUNNING INDEX');
                 const indexStartTime = Date.now();
@@ -129,6 +150,17 @@ export class IndexCommand {
                 );
 
                 this.logger.info(`Indexing completed in ${Date.now() - indexStartTime}ms`);
+
+                // Save snapshot after full reindex so future sync operations know the current state
+                // This prevents auto-sync from re-indexing all files as "new"
+                this.logger.debug('Saving snapshot after full reindex...');
+                const { FileSynchronizer } = await import("@tan-yong-sheng/code-context-core");
+                const snapshotSynchronizer = new FileSynchronizer(selectedFolder.uri.fsPath, this.context.getIgnorePatterns() || []);
+                await snapshotSynchronizer.initialize();
+                const collectionName = this.context.getCollectionName(selectedFolder.uri.fsPath);
+                this.context.setSynchronizer(collectionName, snapshotSynchronizer);
+                this.logger.info('Snapshot saved successfully');
+
                 this.logger.exit('IndexCommand.withProgress');
             });
 
@@ -156,6 +188,7 @@ export class IndexCommand {
             const errorString = typeof error === 'string' ? error : (error.message || error.toString() || '');
             vscode.window.showErrorMessage(`❌ Indexing failed: ${errorString}`);
         } finally {
+            this.isIndexing = false;
             this.logger.exit('IndexCommand.execute');
         }
     }
@@ -182,8 +215,15 @@ export class IndexCommand {
                 return;
             }
 
-            this.logger.info(`Clearing index for: ${workspaceFolders[0].uri.fsPath}`);
+            const codebasePath = workspaceFolders[0].uri.fsPath;
+            const collectionName = this.context.getCollectionName(codebasePath);
+            this.logger.info(`Clearing index for: ${codebasePath}`);
+            this.logger.info(`Collection name: ${collectionName}`);
             const startTime = Date.now();
+
+            // Check if index exists before clearing
+            const hasIndexBefore = await this.context.hasIndex(codebasePath);
+            this.logger.info(`Index exists before clear: ${hasIndexBefore}`);
 
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -202,8 +242,13 @@ export class IndexCommand {
                 );
             });
 
-            this.logger.info(`Index cleared successfully in ${Date.now() - startTime}ms`);
-            vscode.window.showInformationMessage('✅ Index cleared successfully');
+            // Verify index is cleared
+            const hasIndexAfter = await this.context.hasIndex(codebasePath);
+            this.logger.info(`Index exists after clear: ${hasIndexAfter}`);
+
+            const duration = Date.now() - startTime;
+            this.logger.info(`Index cleared successfully in ${duration}ms`);
+            vscode.window.showInformationMessage(`✅ Index cleared successfully (${duration}ms)`);
         } catch (error) {
             this.logger.error('Failed to clear index', error);
             vscode.window.showErrorMessage(`❌ Failed to clear index: ${error}`);

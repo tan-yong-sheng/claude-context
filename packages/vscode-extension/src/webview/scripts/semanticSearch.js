@@ -17,6 +17,27 @@ class SemanticSearchController {
     }
 
     /**
+     * Known model dimensions - auto-filled when a known model is selected
+     */
+    getKnownModelDimensions() {
+        return {
+            // OpenAI models
+            'text-embedding-3-small': 1536,
+            'text-embedding-3-large': 3072,
+            'text-embedding-ada-002': 1536,
+            // VoyageAI models
+            'voyage-code-3': 1024,
+            'voyage-3': 1024,
+            'voyage-3-large': 1024,
+            'voyage-3-lite': 512,
+            'voyage-code-2': 1536,
+            // Gemini models
+            'gemini-embedding-001': 768,
+            'text-embedding-004': 768,
+        };
+    }
+
+    /**
      * Initialize DOM elements
      */
     initializeElements() {
@@ -47,10 +68,17 @@ class SemanticSearchController {
         this.statusDiv = document.getElementById('status');
         this.configForm = document.getElementById('configForm');
 
-        // Advanced config elements
+        // Embedding config elements
         this.embeddingDimensionInput = document.getElementById('embeddingDimension');
         this.embeddingBatchSizeInput = document.getElementById('embeddingBatchSize');
-        this.geminiBaseUrlInput = document.getElementById('geminiBaseUrl');
+
+        // Advanced config elements
+        this.customIgnorePatternsInput = document.getElementById('customIgnorePatterns');
+        this.chunkLimitInput = document.getElementById('chunkLimit');
+
+        // Chunk size hint elements
+        this.chunkSizeHint = document.getElementById('chunkSizeHint');
+        this.chunkOverlapHint = document.getElementById('chunkOverlapHint');
 
         // Current config state
         this.currentConfig = null;
@@ -76,10 +104,12 @@ class SemanticSearchController {
 
         // Settings event listeners
         this.providerSelect.addEventListener('change', () => this.handleProviderChange());
-        this.splitterTypeSelect.addEventListener('change', () => this.validateForm());
+        this.splitterTypeSelect.addEventListener('change', () => this.handleSplitterTypeChange());
         this.chunkSizeInput.addEventListener('input', () => this.validateForm());
         this.chunkOverlapInput.addEventListener('input', () => this.validateForm());
         this.vectorDbPathInput.addEventListener('input', () => this.validateForm());
+        this.customIgnorePatternsInput.addEventListener('input', () => this.validateForm());
+        this.chunkLimitInput.addEventListener('input', () => this.validateForm());
         this.testBtn.addEventListener('click', () => this.handleTestConnection());
         this.configForm.addEventListener('submit', (e) => this.handleFormSubmit(e));
 
@@ -271,7 +301,7 @@ class SemanticSearchController {
                 break;
 
             case 'configData':
-                this.loadConfig(message.config, message.supportedProviders, message.vectorDbConfig, message.splitterConfig, message.advancedConfig);
+                this.loadConfig(message.config, message.supportedProviders, message.vectorDbConfig, message.splitterConfig);
                 break;
 
             case 'saveResult':
@@ -374,6 +404,98 @@ class SemanticSearchController {
 
         // Load current values if available
         this.loadCurrentValues(provider);
+
+        // Add model change listener for auto-filling dimension
+        this.addModelChangeListener();
+    }
+
+    /**
+     * Handle splitter type change - update defaults to match zilliztech/claude-context
+     */
+    handleSplitterTypeChange() {
+        const splitterType = this.splitterTypeSelect.value;
+
+        // Update defaults based on splitter type (matching zilliztech/claude-context)
+        if (splitterType === 'ast') {
+            // AST Splitter defaults: chunkSize=2500, chunkOverlap=300
+            this.chunkSizeInput.value = 2500;
+            this.chunkOverlapInput.value = 300;
+            if (this.chunkSizeHint) {
+                this.chunkSizeHint.textContent = 'AST default: 2500 characters';
+            }
+            if (this.chunkOverlapHint) {
+                this.chunkOverlapHint.textContent = 'AST default: 300 characters';
+            }
+        } else {
+            // LangChain Splitter defaults: chunkSize=1000, chunkOverlap=200
+            this.chunkSizeInput.value = 1000;
+            this.chunkOverlapInput.value = 200;
+            if (this.chunkSizeHint) {
+                this.chunkSizeHint.textContent = 'LangChain default: 1000 characters';
+            }
+            if (this.chunkOverlapHint) {
+                this.chunkOverlapHint.textContent = 'LangChain default: 200 characters';
+            }
+        }
+
+        this.validateForm();
+    }
+
+    /**
+     * Add change listener to model field to auto-fill dimension for known models
+     */
+    addModelChangeListener() {
+        // Find model field (could be input, select, or select-with-custom)
+        const modelField = this.dynamicFieldElements.get('model');
+        if (!modelField) return;
+
+        const knownDimensions = this.getKnownModelDimensions();
+
+        const handleModelChange = (modelValue) => {
+            if (!modelValue) return;
+
+            const knownDimension = knownDimensions[modelValue];
+            if (knownDimension) {
+                // Auto-fill dimension for known models
+                this.embeddingDimensionInput.value = knownDimension;
+                console.log(`[SemanticSearch] Auto-filled dimension ${knownDimension} for model ${modelValue}`);
+            }
+            // For custom models, leave dimension as-is (user must fill it)
+            this.validateForm();
+        };
+
+        // Handle different input types
+        if (modelField.selectElement) {
+            // select-with-custom pattern
+            modelField.selectElement.addEventListener('change', (e) => {
+                if (e.target.value === 'custom') {
+                    // User selected custom, clear dimension for manual entry
+                    this.embeddingDimensionInput.value = '';
+                } else if (e.target.value) {
+                    handleModelChange(e.target.value);
+                }
+                this.validateForm();
+            });
+
+            // Also listen to custom input
+            if (modelField.customInput) {
+                modelField.customInput.addEventListener('input', (e) => {
+                    // For custom models, user must manually enter dimension
+                    // Don't auto-fill, just validate
+                    this.validateForm();
+                });
+            }
+        } else if (modelField.input) {
+            // Regular input or select
+            modelField.input.addEventListener('change', (e) => {
+                handleModelChange(e.target.value);
+            });
+            modelField.input.addEventListener('input', (e) => {
+                // For Ollama (text input), don't auto-fill on every keystroke
+                // Just validate
+                this.validateForm();
+            });
+        }
     }
 
     /**
@@ -589,10 +711,13 @@ class SemanticSearchController {
             hasAllRequiredFields = false;
         }
 
+        // EMBEDDING DIMENSION IS REQUIRED - check if it's filled
+        const hasEmbeddingDimension = !!this.embeddingDimensionInput.value.trim();
+
         // Test button only needs embedding config
         const canTestEmbedding = hasProvider && hasAllRequiredFields;
-        // Save button needs embedding config (vector DB is optional with defaults)
-        const canSave = hasProvider && hasAllRequiredFields;
+        // Save button needs embedding config AND dimension (required!)
+        const canSave = hasProvider && hasAllRequiredFields && hasEmbeddingDimension;
 
         this.testBtn.disabled = !canTestEmbedding;
         this.saveBtn.disabled = !canSave;
@@ -698,21 +823,24 @@ class SemanticSearchController {
         };
 
         // Build advanced config
-        const advancedConfig = {};
+        const customIgnorePatternsRaw = this.customIgnorePatternsInput.value.trim();
+        const customIgnorePatterns = customIgnorePatternsRaw
+            ? customIgnorePatternsRaw.split(',').map(p => p.trim()).filter(Boolean)
+            : [];
 
+        const advancedConfig = {
+            customIgnorePatterns: customIgnorePatterns,
+            chunkLimit: parseInt(this.chunkLimitInput.value, 10)
+        };
+
+        // Build embedding config with dimension (REQUIRED) and batch size
         const embeddingDimension = this.embeddingDimensionInput.value.trim();
-        if (embeddingDimension) {
-            advancedConfig.embeddingDimension = parseInt(embeddingDimension, 10);
-        }
+        // Embedding dimension is REQUIRED - must be filled
+        configData.embeddingDimension = embeddingDimension ? parseInt(embeddingDimension, 10) : 0;
 
         const embeddingBatchSize = this.embeddingBatchSizeInput.value.trim();
         if (embeddingBatchSize) {
-            advancedConfig.embeddingBatchSize = parseInt(embeddingBatchSize, 10);
-        }
-
-        const geminiBaseUrl = this.geminiBaseUrlInput.value.trim();
-        if (geminiBaseUrl) {
-            advancedConfig.geminiBaseUrl = geminiBaseUrl;
+            configData.embeddingBatchSize = parseInt(embeddingBatchSize, 10);
         }
 
         return {
@@ -737,7 +865,14 @@ class SemanticSearchController {
             return false;
         }
 
-// Validate splitter configuration
+        // Validate embedding dimension is REQUIRED
+        if (!config.config.embeddingDimension || config.config.embeddingDimension <= 0) {
+            this.showStatus('Embedding Dimension is required. Please enter a valid dimension (e.g., 1536 for OpenAI, 1024 for VoyageAI).', 'error');
+            this.embeddingDimensionInput.focus();
+            return false;
+        }
+
+        // Validate splitter configuration
         if (!config.splitterConfig.type) {
             this.showStatus('Please select a splitter type', 'error');
             return false;
@@ -775,7 +910,6 @@ class SemanticSearchController {
 
     loadConfig(config, providers, vectorDbConfig, splitterConfig, advancedConfig) {
         this.currentConfig = config;
-        this.currentAdvancedConfig = advancedConfig;
 
         // Only update providers if we actually received them from backend
         if (providers && Object.keys(providers).length > 0) {
@@ -804,28 +938,51 @@ class SemanticSearchController {
             this.vectorDbPathInput.value = vectorDbConfig.dbPath || '';
         }
 
-        // Load splitter config
-        if (splitterConfig) {
-            this.splitterTypeSelect.value = splitterConfig.type || 'langchain';
-            this.chunkSizeInput.value = splitterConfig.chunkSize || 1000;
-            this.chunkOverlapInput.value = splitterConfig.chunkOverlap || 200;
+        // Load splitter config with defaults matching zilliztech/claude-context
+        const splitterType = splitterConfig?.type || 'langchain';
+        this.splitterTypeSelect.value = splitterType;
+
+        // Set defaults based on splitter type (matching zilliztech/claude-context)
+        if (splitterType === 'ast') {
+            // AST Splitter defaults: chunkSize=2500, chunkOverlap=300
+            this.chunkSizeInput.value = splitterConfig?.chunkSize || 2500;
+            this.chunkOverlapInput.value = splitterConfig?.chunkOverlap || 300;
+            if (this.chunkSizeHint) {
+                this.chunkSizeHint.textContent = 'AST default: 2500 characters';
+            }
+            if (this.chunkOverlapHint) {
+                this.chunkOverlapHint.textContent = 'AST default: 300 characters';
+            }
         } else {
-            // Set default values
-            this.splitterTypeSelect.value = 'langchain';
-            this.chunkSizeInput.value = 1000;
-            this.chunkOverlapInput.value = 200;
+            // LangChain Splitter defaults: chunkSize=1000, chunkOverlap=200
+            this.chunkSizeInput.value = splitterConfig?.chunkSize || 1000;
+            this.chunkOverlapInput.value = splitterConfig?.chunkOverlap || 200;
+            if (this.chunkSizeHint) {
+                this.chunkSizeHint.textContent = 'LangChain default: 1000 characters';
+            }
+            if (this.chunkOverlapHint) {
+                this.chunkOverlapHint.textContent = 'LangChain default: 200 characters';
+            }
         }
 
-        // Load advanced config
-        if (advancedConfig) {
-            this.embeddingDimensionInput.value = advancedConfig.embeddingDimension || '';
-            this.embeddingBatchSizeInput.value = advancedConfig.embeddingBatchSize || 100;
-            this.geminiBaseUrlInput.value = advancedConfig.geminiBaseUrl || '';
+        // Load embedding dimension and batch size from embedding config
+        if (config && config.config) {
+            this.embeddingDimensionInput.value = config.config.embeddingDimension || '';
+            this.embeddingBatchSizeInput.value = config.config.embeddingBatchSize || 100;
         } else {
             // Set default values
             this.embeddingDimensionInput.value = '';
             this.embeddingBatchSizeInput.value = 100;
-            this.geminiBaseUrlInput.value = '';
+        }
+
+        // Load advanced config
+        if (advancedConfig) {
+            this.customIgnorePatternsInput.value = advancedConfig.customIgnorePatterns ? advancedConfig.customIgnorePatterns.join(', ') : '';
+            this.chunkLimitInput.value = advancedConfig.chunkLimit || 450000;
+        } else {
+            // Set default values
+            this.customIgnorePatternsInput.value = '';
+            this.chunkLimitInput.value = 450000;
         }
 
         this.validateForm();

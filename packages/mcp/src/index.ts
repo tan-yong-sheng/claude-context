@@ -71,7 +71,9 @@ class ContextMcpServer {
         // Initialize Code Context
         this.context = new Context({
             embedding,
-            vectorDatabase
+            vectorDatabase,
+            chunkLimit: config.chunkLimit,
+            customIgnorePatterns: config.customIgnorePatterns
         });
 
         // Initialize managers

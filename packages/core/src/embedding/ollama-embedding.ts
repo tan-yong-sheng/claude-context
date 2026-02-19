@@ -58,11 +58,17 @@ export class OllamaEmbedding extends Embedding {
         // Preprocess the text
         const processedText = this.preprocessText(text);
 
-        // Detect dimension on first use if not configured
-        if (!this.dimensionDetected && !this.config.dimension) {
-            this.dimension = await this.detectDimension();
-            this.dimensionDetected = true;
-            console.log(`[OllamaEmbedding] 📏 Detected Ollama embedding dimension: ${this.dimension} for model: ${this.config.model}`);
+        // Dimension MUST be configured - NO auto-detection to avoid unnecessary API calls
+        if (!this.config.dimension) {
+            throw new Error(
+                `Embedding dimension is required but not configured for Ollama model '${this.config.model}'.\n\n` +
+                `Please set the embedding dimension in your configuration.\n\n` +
+                `Common Ollama dimensions:\n` +
+                `- nomic-embed-text: 768\n` +
+                `- mxbai-embed-large: 1024\n` +
+                `- all-minilm: 384\n\n` +
+                `Enter the dimension in the "Embedding Dimension" field in settings.`
+            );
         }
 
         const embedOptions: any = {
@@ -92,11 +98,17 @@ export class OllamaEmbedding extends Embedding {
         // Preprocess all texts
         const processedTexts = this.preprocessTexts(texts);
 
-        // Detect dimension on first use if not configured
-        if (!this.dimensionDetected && !this.config.dimension) {
-            this.dimension = await this.detectDimension();
-            this.dimensionDetected = true;
-            console.log(`[OllamaEmbedding] 📏 Detected Ollama embedding dimension: ${this.dimension} for model: ${this.config.model}`);
+        // Dimension MUST be configured - NO auto-detection to avoid unnecessary API calls
+        if (!this.config.dimension) {
+            throw new Error(
+                `Embedding dimension is required but not configured for Ollama model '${this.config.model}'.\n\n` +
+                `Please set the embedding dimension in your configuration.\n\n` +
+                `Common Ollama dimensions:\n` +
+                `- nomic-embed-text: 768\n` +
+                `- mxbai-embed-large: 1024\n` +
+                `- all-minilm: 384\n\n` +
+                `Enter the dimension in the "Embedding Dimension" field in settings.`
+            );
         }
 
         // Use Ollama's native batch embedding API
@@ -195,34 +207,17 @@ export class OllamaEmbedding extends Embedding {
         return this.client;
     }
 
-    async detectDimension(testText: string = "test"): Promise<number> {
-        console.log(`[OllamaEmbedding] Detecting embedding dimension...`);
-
-        try {
-            const processedText = this.preprocessText(testText);
-            const embedOptions: any = {
-                model: this.config.model,
-                input: processedText,
-                options: this.config.options,
-            };
-
-            if (this.config.keepAlive && this.config.keepAlive !== '') {
-                embedOptions.keep_alive = this.config.keepAlive;
-            }
-
-            const response = await this.client.embed(embedOptions);
-
-            if (!response.embeddings || !response.embeddings[0]) {
-                throw new Error('Ollama API returned invalid response');
-            }
-
-            const dimension = response.embeddings[0].length;
-            console.log(`[OllamaEmbedding] Successfully detected embedding dimension: ${dimension}`);
-            return dimension;
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            console.error(`[OllamaEmbedding] Failed to detect dimension: ${errorMessage}`);
-            throw new Error(`Failed to detect Ollama embedding dimension: ${errorMessage}`);
-        }
+    async detectDimension(_testText?: string): Promise<number> {
+        // Ollama models don't have standard dimensions - user must configure it
+        // NO API CALL - require manual configuration
+        throw new Error(
+            `Cannot auto-detect dimension for Ollama model '${this.config.model}'. ` +
+            `Please manually configure the embedding dimension in your settings.\n\n` +
+            `Common Ollama dimensions:\n` +
+            `- nomic-embed-text: 768\n` +
+            `- mxbai-embed-large: 1024\n` +
+            `- all-minilm: 384\n\n` +
+            `Enter the dimension in the "Embedding Dimension" field.`
+        );
     }
 }

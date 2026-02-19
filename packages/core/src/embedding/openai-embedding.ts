@@ -5,6 +5,7 @@ export interface OpenAIEmbeddingConfig {
     model: string;
     apiKey: string;
     baseURL?: string; // OpenAI supports custom baseURL
+    dimension?: number; // Optional: manually specify dimension to avoid API detection
 }
 
 export class OpenAIEmbedding extends Embedding {
@@ -20,37 +21,28 @@ export class OpenAIEmbedding extends Embedding {
             apiKey: config.apiKey,
             baseURL: config.baseURL,
         });
+        // Use configured dimension if provided
+        if (config.dimension && config.dimension > 0) {
+            this.dimension = config.dimension;
+            console.log(`[OpenAIEmbedding] Using configured dimension: ${config.dimension}`);
+        }
     }
 
-    async detectDimension(testText: string = "test"): Promise<number> {
+    async detectDimension(_testText?: string): Promise<number> {
         const model = this.config.model || 'text-embedding-3-small';
         const knownModels = OpenAIEmbedding.getSupportedModels();
 
-        // Use known dimension for standard models
+        // Use known dimension for standard models - NO API CALL
         if (knownModels[model]) {
             return knownModels[model].dimension;
         }
 
-        // For custom models, make API call to detect dimension
-        try {
-            const processedText = this.preprocessText(testText);
-            const response = await this.client.embeddings.create({
-                model: model,
-                input: processedText,
-                encoding_format: 'float',
-            });
-            return response.data[0].embedding.length;
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-            // Re-throw authentication errors
-            if (errorMessage.includes('API key') || errorMessage.includes('unauthorized') || errorMessage.includes('authentication')) {
-                throw new Error(`Failed to detect dimension for model ${model}: ${errorMessage}`);
-            }
-
-            // For other errors, throw exception instead of using fallback
-            throw new Error(`Failed to detect dimension for model ${model}: ${errorMessage}`);
-        }
+        // For custom models, dimension must be configured - throw error instead of API call
+        throw new Error(
+            `Cannot auto-detect dimension for custom OpenAI model '${model}'. ` +
+            `Please manually configure the embedding dimension in your settings.\n\n` +
+            `Known models: ${Object.keys(knownModels).join(', ')}`
+        );
     }
 
     async embed(text: string): Promise<EmbeddingVector> {
@@ -60,18 +52,20 @@ export class OpenAIEmbedding extends Embedding {
         const knownModels = OpenAIEmbedding.getSupportedModels();
         if (knownModels[model] && this.dimension !== knownModels[model].dimension) {
             this.dimension = knownModels[model].dimension;
-        } else if (!knownModels[model]) {
-            this.dimension = await this.detectDimension();
         }
+        // For custom models: dimension MUST be configured via config.dimension
+        // NO auto-detection via API to avoid unnecessary calls
 
         try {
+            console.log(`[OpenAIEmbedding] 🌐 Calling embedding API for 1 text (${processedText.length} chars)...`);
             const response = await this.client.embeddings.create({
                 model: model,
                 input: processedText,
                 encoding_format: 'float',
             });
+            console.log(`[OpenAIEmbedding] ✅ Received embedding (dimension: ${response.data[0].embedding.length})`);
 
-            // Update dimension from actual response
+            // Update dimension from actual response (optional - for verification)
             this.dimension = response.data[0].embedding.length;
 
             return {
@@ -91,16 +85,19 @@ export class OpenAIEmbedding extends Embedding {
         const knownModels = OpenAIEmbedding.getSupportedModels();
         if (knownModels[model] && this.dimension !== knownModels[model].dimension) {
             this.dimension = knownModels[model].dimension;
-        } else if (!knownModels[model]) {
-            this.dimension = await this.detectDimension();
         }
+        // For custom models: dimension MUST be configured via config.dimension
+        // NO auto-detection via API to avoid unnecessary calls
 
         try {
+            const totalChars = processedTexts.reduce((sum, text) => sum + text.length, 0);
+            console.log(`[OpenAIEmbedding] 🌐 Calling embedding API for ${processedTexts.length} texts (~${Math.round(totalChars / 4)} tokens)...`);
             const response = await this.client.embeddings.create({
                 model: model,
                 input: processedTexts,
                 encoding_format: 'float',
             });
+            console.log(`[OpenAIEmbedding] ✅ Received ${response.data.length} embeddings`);
 
             this.dimension = response.data[0].embedding.length;
 

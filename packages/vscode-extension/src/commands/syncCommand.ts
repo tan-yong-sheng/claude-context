@@ -7,10 +7,18 @@ export class SyncCommand {
     private context: Context;
     private isSyncing: boolean = false;
     private logger = getLogger();
+    private indexCommand?: { getIsIndexing: () => boolean };
 
     constructor(context: Context) {
         this.context = context;
         this.logger.debug('SyncCommand instance created');
+    }
+
+    /**
+     * Set the IndexCommand reference to check for concurrent indexing
+     */
+    setIndexCommand(indexCommand: { getIsIndexing: () => boolean }): void {
+        this.indexCommand = indexCommand;
     }
 
     /**
@@ -159,6 +167,12 @@ export class SyncCommand {
 
         if (this.isSyncing) {
             this.logger.info('[AUTO-SYNC] Sync already in progress, skipping...');
+            return;
+        }
+
+        // Skip auto-sync if manual indexing is in progress
+        if (this.indexCommand?.getIsIndexing()) {
+            this.logger.info('[AUTO-SYNC] Manual indexing in progress, skipping auto-sync to avoid conflict');
             return;
         }
 

@@ -17,6 +17,9 @@ export interface ContextMcpConfig {
     // Ollama configuration
     ollamaModel?: string;
     ollamaHost?: string;
+    // Indexing configuration
+    chunkLimit?: number;  // Optional: maximum chunks to index (default: 450000)
+    customIgnorePatterns?: string[];  // Optional: additional ignore patterns
 }
 
 // Legacy format (v1) - for backward compatibility
@@ -139,6 +142,47 @@ export function getEmbeddingBatchSize(): number | undefined {
     return parsed;
 }
 
+// Helper function to get chunk limit from environment variable
+export function getChunkLimit(): number | undefined {
+    const chunkLimitEnv = envManager.get('CHUNK_LIMIT');
+    if (!chunkLimitEnv) {
+        return undefined;
+    }
+
+    const parsed = parseInt(chunkLimitEnv, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+        console.warn(`[Config] ⚠️ Invalid CHUNK_LIMIT value: "${chunkLimitEnv}". Using default (450000).`);
+        return undefined;
+    }
+
+    console.log(`[Config] 📊 Using manually configured chunk limit: ${parsed}`);
+    return parsed;
+}
+
+// Helper function to get custom ignore patterns from environment variable
+// Supports CUSTOM_IGNORE_PATTERNS as comma-separated list
+export function getCustomIgnorePatterns(): string[] {
+    const envIgnorePatterns = envManager.get('CUSTOM_IGNORE_PATTERNS');
+    if (!envIgnorePatterns) {
+        return [];
+    }
+
+    try {
+        const patterns = envIgnorePatterns
+            .split(',')
+            .map(pattern => pattern.trim())
+            .filter(pattern => pattern.length > 0);
+
+        if (patterns.length > 0) {
+            console.log(`[Config] 🚫 Loaded ${patterns.length} custom ignore patterns from environment: ${patterns.join(', ')}`);
+        }
+        return patterns;
+    } catch (error) {
+        console.warn(`[Config] ⚠️ Failed to parse CUSTOM_IGNORE_PATTERNS: ${error}`);
+        return [];
+    }
+}
+
 export function createMcpConfig(): ContextMcpConfig {
     // Debug: Print all environment variables related to Context
     console.log(`[DEBUG] 🔍 Environment Variables Debug:`);
@@ -146,6 +190,8 @@ export function createMcpConfig(): ContextMcpConfig {
     console.log(`[DEBUG]   EMBEDDING_MODEL: ${envManager.get('EMBEDDING_MODEL') || 'NOT SET'}`);
     console.log(`[DEBUG]   EMBEDDING_DIMENSION: ${envManager.get('EMBEDDING_DIMENSION') || 'NOT SET (auto-detect)'}`);
     console.log(`[DEBUG]   EMBEDDING_BATCH_SIZE: ${envManager.get('EMBEDDING_BATCH_SIZE') || 'NOT SET (default: 100)'}`);
+    console.log(`[DEBUG]   CHUNK_LIMIT: ${envManager.get('CHUNK_LIMIT') || 'NOT SET (default: 450000)'}`);
+    console.log(`[DEBUG]   CUSTOM_IGNORE_PATTERNS: ${envManager.get('CUSTOM_IGNORE_PATTERNS') || 'NOT SET'}`);
     console.log(`[DEBUG]   OLLAMA_MODEL: ${envManager.get('OLLAMA_MODEL') || 'NOT SET'}`);
     console.log(`[DEBUG]   GEMINI_API_KEY: ${envManager.get('GEMINI_API_KEY') ? 'SET (length: ' + envManager.get('GEMINI_API_KEY')!.length + ')' : 'NOT SET'}`);
     console.log(`[DEBUG]   OPENAI_API_KEY: ${envManager.get('OPENAI_API_KEY') ? 'SET (length: ' + envManager.get('OPENAI_API_KEY')!.length + ')' : 'NOT SET'}`);
@@ -174,7 +220,10 @@ export function createMcpConfig(): ContextMcpConfig {
         geminiBaseUrl: envManager.get('GEMINI_BASE_URL'),
         // Ollama configuration
         ollamaModel: envManager.get('OLLAMA_MODEL'),
-        ollamaHost: envManager.get('OLLAMA_HOST')
+        ollamaHost: envManager.get('OLLAMA_HOST'),
+        // Indexing configuration
+        chunkLimit: getChunkLimit(),
+        customIgnorePatterns: getCustomIgnorePatterns()
     };
 
     return config;
@@ -189,6 +238,8 @@ export function logConfigurationSummary(config: ContextMcpConfig): void {
     console.log(`[MCP]   Embedding Model: ${config.embeddingModel}`);
     console.log(`[MCP]   Embedding Dimension: ${config.embeddingDimension ? `${config.embeddingDimension} (manual override)` : 'auto-detect'}`);
     console.log(`[MCP]   Embedding Batch Size: ${config.embeddingBatchSize || 100}`);
+    console.log(`[MCP]   Chunk Limit: ${config.chunkLimit || 450000}`);
+    console.log(`[MCP]   Custom Ignore Patterns: ${config.customIgnorePatterns && config.customIgnorePatterns.length > 0 ? config.customIgnorePatterns.join(', ') : 'none'}`);
     console.log(`[MCP]   Vector DB: sqlite-vec (local SQLite)`);
 
     // Log provider-specific configuration without exposing sensitive data
@@ -236,6 +287,10 @@ Environment Variables:
   EMBEDDING_DIMENSION     Embedding dimension (optional, overrides auto-detection)
   EMBEDDING_BATCH_SIZE    Batch size for processing embeddings (default: 100)
 
+  Indexing Configuration:
+  CHUNK_LIMIT             Maximum number of chunks to index per codebase (default: 450000)
+  CUSTOM_IGNORE_PATTERNS  Comma-separated glob patterns to ignore (e.g., '**/generated/**,**/*.min.js')
+
   Provider-specific API Keys:
   OPENAI_API_KEY          OpenAI API key (required for OpenAI provider)
   OPENAI_BASE_URL         OpenAI API base URL (optional, for custom endpoints)
@@ -265,5 +320,8 @@ Examples:
 
   # Start MCP server with Ollama and specific model (using EMBEDDING_MODEL)
   EMBEDDING_PROVIDER=ollama EMBEDDING_MODEL=nomic-embed-text npx @tan-yong-sheng/code-context-mcp@latest
+
+  # Start MCP server with custom chunk limit and ignore patterns
+  CHUNK_LIMIT=100000 CUSTOM_IGNORE_PATTERNS='**/generated/**,**/*.min.js' npx @tan-yong-sheng/code-context-mcp@latest
         `);
 } 

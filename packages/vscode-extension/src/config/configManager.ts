@@ -44,6 +44,23 @@ type FieldDefinition = {
     required?: boolean;
 };
 
+// Known model dimensions mapping
+const KNOWN_MODEL_DIMENSIONS: Record<string, number> = {
+    // OpenAI models
+    'text-embedding-3-small': 1536,
+    'text-embedding-3-large': 3072,
+    'text-embedding-ada-002': 1536,
+    // VoyageAI models
+    'voyage-code-3': 1024,
+    'voyage-3': 1024,
+    'voyage-3-large': 1024,
+    'voyage-3-lite': 512,
+    'voyage-code-2': 1536,
+    // Gemini models
+    'gemini-embedding-001': 768,
+    'text-embedding-004': 768,
+};
+
 // Unified provider configuration
 const EMBEDDING_PROVIDERS = {
     'OpenAI': {
@@ -203,6 +220,30 @@ export class ConfigManager {
         const configObject = this.buildConfigObject(provider, config);
         if (!configObject) return undefined;
 
+        // Also read embedding dimension and batch size from embeddingProvider section
+        let embeddingDimension = config.get<number>('embeddingProvider.embeddingDimension');
+        const embeddingBatchSize = config.get<number>('embeddingProvider.embeddingBatchSize');
+
+        // Auto-fill dimension for known models if not manually set
+        if (!embeddingDimension && configObject.model) {
+            const knownDimension = KNOWN_MODEL_DIMENSIONS[configObject.model];
+            if (knownDimension) {
+                embeddingDimension = knownDimension;
+                console.log(`[ConfigManager] Auto-filled dimension ${knownDimension} for known model ${configObject.model}`);
+            }
+        }
+
+        // Embedding dimension is REQUIRED - cannot proceed without it
+        if (!embeddingDimension) {
+            console.warn(`[ConfigManager] Embedding dimension is required but not set for model ${configObject.model}`);
+            return undefined;
+        }
+
+        (configObject as any).embeddingDimension = embeddingDimension;
+        if (embeddingBatchSize) {
+            (configObject as any).embeddingBatchSize = embeddingBatchSize;
+        }
+
         return {
             provider: provider as 'OpenAI' | 'VoyageAI' | 'Ollama' | 'Gemini',
             config: configObject
@@ -247,6 +288,14 @@ export class ConfigManager {
                 vscode.ConfigurationTarget.Global
             );
         }
+
+        // Save embedding dimension and batch size
+        if ((config as any).embeddingDimension !== undefined) {
+            await workspaceConfig.update('embeddingProvider.embeddingDimension', (config as any).embeddingDimension, vscode.ConfigurationTarget.Global);
+        }
+        if ((config as any).embeddingBatchSize !== undefined) {
+            await workspaceConfig.update('embeddingProvider.embeddingBatchSize', (config as any).embeddingBatchSize, vscode.ConfigurationTarget.Global);
+        }
     }
 
     /**
@@ -257,7 +306,14 @@ export class ConfigManager {
         if (!providerInfo) {
             throw new Error(`Unknown provider: ${provider}`);
         }
-        return new providerInfo.class(config);
+
+        // Map embeddingDimension to dimension for the embedding classes
+        const mappedConfig = { ...config };
+        if (config.embeddingDimension) {
+            mappedConfig.dimension = config.embeddingDimension;
+        }
+
+        return new providerInfo.class(mappedConfig);
     }
 
     /**
@@ -368,23 +424,36 @@ export class ConfigManager {
     }
 
     /**
-     * Get advanced configuration (embedding dimension, batch size, custom extensions/ignore patterns)
+     * Get chunk limit configuration
+     */
+    getChunkLimit(): number {
+        const config = vscode.workspace.getConfiguration(ConfigManager.CONFIG_KEY);
+        return config.get<number>('advanced.chunkLimit', 450000);
+    }
+
+    /**
+     * Save chunk limit configuration
+     */
+    async saveChunkLimit(chunkLimit: number): Promise<void> {
+        const workspaceConfig = vscode.workspace.getConfiguration(ConfigManager.CONFIG_KEY);
+        await workspaceConfig.update('advanced.chunkLimit', chunkLimit, vscode.ConfigurationTarget.Global);
+    }
+
+    /**
+     * Get advanced configuration (custom only)
+     * extensions/ignore patterns Note: embeddingDimension and embeddingBatchSize are now part of embeddingProvider config
      */
     getAdvancedConfig(): {
-        embeddingDimension?: number;
-        embeddingBatchSize?: number;
         customExtensions?: string[];
         customIgnorePatterns?: string[];
-        geminiBaseUrl?: string;
+        chunkLimit?: number;
     } {
         const config = vscode.workspace.getConfiguration(ConfigManager.CONFIG_KEY);
 
         return {
-            embeddingDimension: config.get<number>('advanced.embeddingDimension') || undefined,
-            embeddingBatchSize: config.get<number>('advanced.embeddingBatchSize') || 100,
             customExtensions: config.get<string[]>('advanced.customExtensions') || [],
             customIgnorePatterns: config.get<string[]>('advanced.customIgnorePatterns') || [],
-            geminiBaseUrl: config.get<string>('advanced.geminiBaseUrl') || undefined
+            chunkLimit: config.get<number>('advanced.chunkLimit') || 450000
         };
     }
 
@@ -392,28 +461,20 @@ export class ConfigManager {
      * Save advanced configuration
      */
     async saveAdvancedConfig(advancedConfig: {
-        embeddingDimension?: number;
-        embeddingBatchSize?: number;
         customExtensions?: string[];
         customIgnorePatterns?: string[];
-        geminiBaseUrl?: string;
+        chunkLimit?: number;
     }): Promise<void> {
         const workspaceConfig = vscode.workspace.getConfiguration(ConfigManager.CONFIG_KEY);
 
-        if (advancedConfig.embeddingDimension !== undefined) {
-            await workspaceConfig.update('advanced.embeddingDimension', advancedConfig.embeddingDimension, vscode.ConfigurationTarget.Global);
-        }
-        if (advancedConfig.embeddingBatchSize !== undefined) {
-            await workspaceConfig.update('advanced.embeddingBatchSize', advancedConfig.embeddingBatchSize, vscode.ConfigurationTarget.Global);
-        }
         if (advancedConfig.customExtensions !== undefined) {
             await workspaceConfig.update('advanced.customExtensions', advancedConfig.customExtensions, vscode.ConfigurationTarget.Global);
         }
         if (advancedConfig.customIgnorePatterns !== undefined) {
             await workspaceConfig.update('advanced.customIgnorePatterns', advancedConfig.customIgnorePatterns, vscode.ConfigurationTarget.Global);
         }
-        if (advancedConfig.geminiBaseUrl !== undefined) {
-            await workspaceConfig.update('advanced.geminiBaseUrl', advancedConfig.geminiBaseUrl, vscode.ConfigurationTarget.Global);
+        if (advancedConfig.chunkLimit !== undefined) {
+            await workspaceConfig.update('advanced.chunkLimit', advancedConfig.chunkLimit, vscode.ConfigurationTarget.Global);
         }
     }
 }

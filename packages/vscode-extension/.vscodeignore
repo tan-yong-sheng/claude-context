@@ -2,7 +2,6 @@
 out/
 dist/*.map
 dist/*.LICENSE.txt
-node_modules/
 
 # Source files
 src/**/*.ts
@@ -69,3 +68,6 @@ wasm/
 
 # License file (not needed at runtime, though vsce may include it anyway)
 # LICENSE
+
+# Include dist/node_modules for runtime (external webpack dependencies like better-sqlite3)
+!dist/node_modules/**

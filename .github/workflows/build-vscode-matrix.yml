@@ -1,0 +1,270 @@
+name: Build VSCode Extension (Matrix)
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      vs_code_version:
+        description: 'VS Code version for Electron target (e.g., 1.109.4)'
+        required: true
+        default: '1.109.4'
+        type: string
+      electron_version:
+        description: 'Electron version (check https://github.com/ewanharris/vscode-versions)'
+        required: true
+        default: '39.3.0'
+        type: string
+      publish:
+        description: 'Publish to marketplace'
+        required: true
+        default: false
+        type: boolean
+
+  # Auto-trigger on tags
+  push:
+    tags:
+      - 'vscode-v*'
+
+jobs:
+  # Get VS Code version info
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      vs_code_version: ${{ steps.version.outputs.vs_code_version }}
+      node_version: ${{ steps.version.outputs.node_version }}
+    steps:
+      - name: Determine versions
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "vs_code_version=${{ inputs.vs_code_version }}" >> $GITHUB_OUTPUT
+            # VS Code 1.109 uses Node 22.21.1
+            echo "node_version=22.21.1" >> $GITHUB_OUTPUT
+          else
+            # Default versions for tag pushes
+            echo "vs_code_version=1.109.4" >> $GITHUB_OUTPUT
+            # VS Code 1.109 uses Node 22.21.1
+            echo "node_version=22.21.1" >> $GITHUB_OUTPUT
+          fi
+
+  # Build on multiple platforms
+  build-matrix:
+    needs: setup
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            target: linux-x64
+          - os: ubuntu-latest
+            platform: linux
+            arch: arm64
+            target: linux-arm64
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+            target: darwin-x64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            target: darwin-arm64
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            target: win32-x64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Python (for node-gyp)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsqlite3-dev
+
+      - name: Rebuild better-sqlite3 for Node.js
+        env:
+          TARGET_NODE_VERSION: ${{ needs.setup.outputs.node_version }}
+          TARGET_ARCH: ${{ matrix.arch }}
+          npm_config_target: ${{ needs.setup.outputs.node_version }}
+          npm_config_runtime: node
+          npm_config_disturl: https://nodejs.org/dist
+          npm_config_build_from_source: 'true'
+          npm_config_arch: ${{ matrix.arch }}
+          npm_config_target_arch: ${{ matrix.arch }}
+        run: |
+          cd packages/vscode-extension
+          pnpm rebuild-native:ci
+
+      - name: Build core package
+        run: pnpm --filter @tan-yong-sheng/code-context-core build
+
+      - name: Build VSCode extension
+        run: |
+          cd packages/vscode-extension
+          pnpm webpack
+
+      - name: Copy native dependencies
+        run: |
+          cd packages/vscode-extension
+          node scripts/copy-native-deps.js
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Package extension (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd packages/vscode-extension
+          vsce package --no-dependencies --target ${{ matrix.target }}
+          # Rename to include platform in filename
+          mv *.vsix ai-code-context-${{ matrix.target }}.vsix
+
+      - name: Package extension (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd packages/vscode-extension
+          vsce package --no-dependencies --target ${{ matrix.target }}
+          Rename-Item -Path "*.vsix" -NewName "ai-code-context-${{ matrix.target }}.vsix"
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension-${{ matrix.target }}
+          path: packages/vscode-extension/*.vsix
+          retention-days: 7
+
+  # Universal build (no platform-specific binaries)
+  build-universal:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build core package
+        run: pnpm --filter @tan-yong-sheng/code-context-core build
+
+      - name: Build VSCode extension
+        run: |
+          cd packages/vscode-extension
+          pnpm webpack
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Package extension (universal)
+        run: |
+          cd packages/vscode-extension
+          vsce package --no-dependencies
+
+      - name: Upload universal VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension-universal
+          path: packages/vscode-extension/*.vsix
+          retention-days: 7
+
+  # Collect all artifacts and create release
+  release:
+    needs: [setup, build-matrix, build-universal]
+    runs-on: ubuntu-latest
+    if: always() && needs.build-matrix.result == 'success' && needs.build-universal.result == 'success'
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: vscode-extension-*
+
+      - name: List artifacts
+        run: |
+          echo "All built artifacts:"
+          find artifacts -name "*.vsix" -type f
+
+      - name: Create Release (tag push only)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/**/*.vsix
+          generate_release_notes: true
+          name: VSCode Extension Release ${{ github.ref_name }}
+
+      - name: Upload to VSCode Marketplace (manual trigger with publish=true)
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          npm install -g @vscode/vsce
+
+          # Publish platform-specific versions
+          for vsix in artifacts/vscode-extension-*/ai-code-context-*.vsix; do
+            echo "Publishing $vsix"
+            vsce publish --packagePath "$vsix" --no-dependencies -p "$VSCE_PAT" || echo "Failed to publish $vsix"
+          done
+
+          # Also publish universal version
+          vsce publish --packagePath artifacts/vscode-extension-universal/*.vsix --no-dependencies -p "$VSCE_PAT" || echo "Universal publish skipped"
+
+  # Summary
+  summary:
+    needs: [setup, build-matrix, build-universal, release]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Build Summary
+        run: |
+          echo "=========================================="
+          echo "VSCode Extension Matrix Build Summary"
+          echo "=========================================="
+          echo "VS Code Version: ${{ needs.setup.outputs.vs_code_version }}"
+          echo "Electron Version: ${{ needs.setup.outputs.electron_version }}"
+          echo ""
+          echo "Platform Builds:"
+          echo "  - Linux x64: ${{ needs.build-matrix.result }}"
+          echo "  - Linux ARM64: ${{ needs.build-matrix.result }}"
+          echo "  - macOS x64: ${{ needs.build-matrix.result }}"
+          echo "  - macOS ARM64: ${{ needs.build-matrix.result }}"
+          echo "  - Windows x64: ${{ needs.build-matrix.result }}"
+          echo "  - Universal: ${{ needs.build-universal.result }}"
+          echo ""
+          echo "Release: ${{ needs.release.result }}"
+          echo "=========================================="

@@ -21,7 +21,10 @@ module.exports = {
     },
     devtool: 'nosources-source-map',
     externals: {
-        vscode: 'commonjs vscode' // the vscode-module is created on-the-fly and must be excluded
+        vscode: 'commonjs vscode', // the vscode-module is created on-the-fly and must be excluded
+        'better-sqlite3': 'commonjs better-sqlite3', // exclude native module - must be loaded at runtime
+        'bindings': 'commonjs bindings', // exclude bindings package - used by better-sqlite3 for dynamic loading
+        'sqlite-vec': 'commonjs sqlite-vec' // exclude sqlite-vec - it needs to load platform-specific extensions
     },
     resolve: {
         // support reading TypeScript and JavaScript files

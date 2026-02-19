@@ -77,6 +77,23 @@
                 <!-- Dynamic form fields will be inserted here -->
                 <div id="dynamicFields"></div>
 
+                <div class="form-group">
+                    <label for="embeddingDimension">Embedding Dimension *</label>
+                    <input type="number" id="embeddingDimension" min="1" max="8192" placeholder="e.g., 1536" required>
+                    <small style="color: var(--vscode-descriptionForeground); margin-top: 4px; display: block;">
+                        Required: Auto-filled for known models (e.g., 1536 for text-embedding-3-small). Must be manually
+                        entered for custom models.
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="embeddingBatchSize">Embedding Batch Size</label>
+                    <input type="number" id="embeddingBatchSize" min="1" max="1000" value="100">
+                    <small style="color: var(--vscode-descriptionForeground); margin-top: 4px; display: block;">
+                        Number of chunks processed per batch. Lower for rate-limited APIs.
+                    </small>
+                </div>
+
                 <div class="button-group">
                     <button type="button" id="testBtn" class="secondary-btn" disabled>Test Embedding</button>
                 </div>
@@ -94,21 +111,29 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="chunkSize">Chunk Size</label>
+                    <label for="chunkSize">Chunk Size (characters)</label>
                     <input type="number" id="chunkSize" min="100" max="5000" value="1000" required>
+                    <small id="chunkSizeHint"
+                        style="color: var(--vscode-descriptionForeground); margin-top: 4px; display: block;">
+                        Default: 1000 for LangChain, 2500 for AST splitter
+                    </small>
                 </div>
 
                 <div class="form-group">
-                    <label for="chunkOverlap">Chunk Overlap</label>
+                    <label for="chunkOverlap">Chunk Overlap (characters)</label>
                     <input type="number" id="chunkOverlap" min="0" max="1000" value="200" required>
+                    <small id="chunkOverlapHint"
+                        style="color: var(--vscode-descriptionForeground); margin-top: 4px; display: block;">
+                        Default: 200 for LangChain, 300 for AST splitter
+                    </small>
                 </div>
 
                 <div class="form-separator"></div>
 
-                <h3>Vector Database Configuration (Optional)</h3>
+                <h3>Vector Database Configuration</h3>
 
                 <div class="form-group">
-                    <label for="vectorDbPath">Custom Database Path</label>
+                    <label for="vectorDbPath">Custom Database Path (Optional)</label>
                     <input type="text" id="vectorDbPath" placeholder="Default: ~/.code-context/vectors/">
                     <small style="color: var(--vscode-descriptionForeground); margin-top: 4px; display: block;">
                         Leave empty to use default location. Each codebase gets its own SQLite database file.
@@ -117,29 +142,21 @@
 
                 <div class="form-separator"></div>
 
-                <h3>Advanced Configuration (Optional)</h3>
+                <h3>Advanced Configuration</h3>
 
                 <div class="form-group">
-                    <label for="embeddingDimension">Embedding Dimension</label>
-                    <input type="number" id="embeddingDimension" min="1" max="8192" placeholder="Auto-detect">
+                    <label for="customIgnorePatterns">Custom Ignore Patterns (Optional)</label>
+                    <input type="text" id="customIgnorePatterns" placeholder="e.g., **/generated/**, **/*.min.js">
                     <small style="color: var(--vscode-descriptionForeground); margin-top: 4px; display: block;">
-                        Override for Matryoshka embeddings (e.g., 256, 768, 1536). Leave empty for auto-detection.
+                        Comma-separated glob patterns to ignore. Leave empty to use defaults.
                     </small>
                 </div>
 
                 <div class="form-group">
-                    <label for="embeddingBatchSize">Embedding Batch Size</label>
-                    <input type="number" id="embeddingBatchSize" min="1" max="1000" value="100">
+                    <label for="chunkLimit">Chunk Limit (Optional)</label>
+                    <input type="number" id="chunkLimit" min="100000" max="2000000" value="450000">
                     <small style="color: var(--vscode-descriptionForeground); margin-top: 4px; display: block;">
-                        Number of chunks processed per batch. Lower for rate-limited APIs.
-                    </small>
-                </div>
-
-                <div class="form-group">
-                    <label for="geminiBaseUrl">Gemini Base URL (Optional)</label>
-                    <input type="text" id="geminiBaseUrl" placeholder="https://generativelanguage.googleapis.com/v1beta">
-                    <small style="color: var(--vscode-descriptionForeground); margin-top: 4px; display: block;">
-                        Custom endpoint for Gemini API. Leave empty for default.
+                        Maximum chunks to index (default: 450000). Increase for larger codebases.
                     </small>
                 </div>
 

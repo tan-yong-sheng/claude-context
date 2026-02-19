@@ -32,7 +32,7 @@ export abstract class Embedding {
     }
 
     /**
-     * Detect embedding dimension 
+     * Detect embedding dimension
      * @param testText Test text for dimension detection
      * @returns Embedding dimension
      */
@@ -73,4 +73,4 @@ export abstract class Embedding {
      * @returns Provider name
      */
     abstract getProvider(): string;
-} 
+}

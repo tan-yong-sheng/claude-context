@@ -76,7 +76,7 @@ describe('Context Embedding Configuration Integration Tests', () => {
             expect(result.status).toBe('completed');
         }, TEST_TIMEOUT);
 
-        test('EMBEDDING_DIMENSION env var overrides auto-detection', async () => {
+        test('EMBEDDING_DIMENSION env var provides dimension', async () => {
             const envDimension = 1024;
             process.env.EMBEDDING_DIMENSION = envDimension.toString();
 
@@ -84,6 +84,7 @@ describe('Context Embedding Configuration Integration Tests', () => {
             const context = new Context({
                 embedding,
                 vectorDatabase: db
+                // Note: dimension comes from EMBEDDING_DIMENSION env var
             });
 
             fs.writeFileSync(
@@ -120,7 +121,7 @@ describe('Context Embedding Configuration Integration Tests', () => {
             expect(result.status).toBe('completed');
         }, TEST_TIMEOUT);
 
-        test('invalid EMBEDDING_DIMENSION falls back to auto-detection', async () => {
+        test('invalid EMBEDDING_DIMENSION throws error during indexing - dimension is required', async () => {
             process.env.EMBEDDING_DIMENSION = 'invalid';
 
             const embedding = new MockEmbeddingProvider(MOCK_EMBEDDING_DIMENSION);
@@ -134,21 +135,11 @@ describe('Context Embedding Configuration Integration Tests', () => {
                 'function test() { return 1; }'
             );
 
-            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
-            const result = await context.indexCodebase(testCodebasePath);
-
-            expect(result.indexedFiles).toBe(1);
-            // Verify warning was logged (check if any call contains the expected text)
-            const hasWarning = consoleWarnSpy.mock.calls.some(call =>
-                typeof call[0] === 'string' && call[0].includes('Invalid EMBEDDING_DIMENSION')
-            );
-            expect(hasWarning).toBe(true);
-
-            consoleWarnSpy.mockRestore();
+            // Without explicit embeddingDimension and with invalid env var, should throw during indexing
+            await expect(context.indexCodebase(testCodebasePath)).rejects.toThrow('Embedding dimension is required');
         }, TEST_TIMEOUT);
 
-        test('zero EMBEDDING_DIMENSION falls back to auto-detection', async () => {
+        test('zero EMBEDDING_DIMENSION throws error during indexing - dimension is required', async () => {
             process.env.EMBEDDING_DIMENSION = '0';
 
             const embedding = new MockEmbeddingProvider(MOCK_EMBEDDING_DIMENSION);
@@ -162,18 +153,8 @@ describe('Context Embedding Configuration Integration Tests', () => {
                 'function test() { return 1; }'
             );
 
-            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
-
-            const result = await context.indexCodebase(testCodebasePath);
-
-            expect(result.indexedFiles).toBe(1);
-            // Verify warning was logged (check if any call contains the expected text)
-            const hasWarning = consoleWarnSpy.mock.calls.some(call =>
-                typeof call[0] === 'string' && call[0].includes('Invalid EMBEDDING_DIMENSION')
-            );
-            expect(hasWarning).toBe(true);
-
-            consoleWarnSpy.mockRestore();
+            // Without explicit embeddingDimension and with zero env var, should throw during indexing
+            await expect(context.indexCodebase(testCodebasePath)).rejects.toThrow('Embedding dimension is required');
         }, TEST_TIMEOUT);
     });
 
@@ -184,6 +165,7 @@ describe('Context Embedding Configuration Integration Tests', () => {
             const context = new Context({
                 embedding,
                 vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION,
                 embeddingBatchSize: customBatchSize
             });
 
@@ -207,7 +189,8 @@ describe('Context Embedding Configuration Integration Tests', () => {
             const embedding = new MockEmbeddingProvider();
             const context = new Context({
                 embedding,
-                vectorDatabase: db
+                vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION
             });
 
             for (let i = 0; i < 3; i++) {
@@ -231,6 +214,7 @@ describe('Context Embedding Configuration Integration Tests', () => {
             const context = new Context({
                 embedding,
                 vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION,
                 embeddingBatchSize: configBatchSize
             });
 
@@ -247,13 +231,14 @@ describe('Context Embedding Configuration Integration Tests', () => {
             expect(result.status).toBe('completed');
         }, TEST_TIMEOUT);
 
-        test('invalid EMBEDDING_BATCH_SIZE uses default', async () => {
+        test('invalid EMBEDDING_BATCH_SIZE uses default with explicit dimension', async () => {
             process.env.EMBEDDING_BATCH_SIZE = 'invalid';
 
             const embedding = new MockEmbeddingProvider();
             const context = new Context({
                 embedding,
-                vectorDatabase: db
+                vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION
             });
 
             fs.writeFileSync(
@@ -267,13 +252,14 @@ describe('Context Embedding Configuration Integration Tests', () => {
             // Context silently falls back to default batch size without warning
         }, TEST_TIMEOUT);
 
-        test('negative EMBEDDING_BATCH_SIZE uses default', async () => {
+        test('negative EMBEDDING_BATCH_SIZE uses default with explicit dimension', async () => {
             process.env.EMBEDDING_BATCH_SIZE = '-10';
 
             const embedding = new MockEmbeddingProvider();
             const context = new Context({
                 embedding,
-                vectorDatabase: db
+                vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION
             });
 
             fs.writeFileSync(
@@ -344,6 +330,7 @@ describe('Context Embedding Configuration Integration Tests', () => {
             const context = new Context({
                 embedding,
                 vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION,
                 embeddingBatchSize: 1
             });
 

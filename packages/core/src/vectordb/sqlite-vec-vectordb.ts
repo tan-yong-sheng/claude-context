@@ -43,9 +43,11 @@ function getVectorDbDir(): string {
  * Get database path from a collection name or codebase path.
  * For hashed collection names like 'hybrid_code_chunks_66d4e57c', extracts the hash and uses it directly.
  * For regular paths, computes the hash of the path.
+ * @param collectionName The collection name or codebase path
+ * @param customDbDir Optional custom directory for database files (defaults to getVectorDbDir())
  */
-function getDbPathFromCollection(collectionName: string): string {
-    const vectorDbDir = getVectorDbDir();
+function getDbPathFromCollection(collectionName: string, customDbDir?: string): string {
+    const vectorDbDir = customDbDir || getVectorDbDir();
 
     // Ensure directory exists
     if (!fs.existsSync(vectorDbDir)) {
@@ -88,7 +90,9 @@ export class SqliteVecVectorDatabase implements VectorDatabase {
             this.db.close();
         }
 
-        const dbPath = this.config.dbPath || getDbPathFromCollection(codebasePath);
+        const dbPath = this.config.dbPath
+            ? getDbPathFromCollection(codebasePath, this.config.dbPath)
+            : getDbPathFromCollection(codebasePath);
 
         // Ensure parent directory exists
         const db = new Database(dbPath);

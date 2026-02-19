@@ -8,7 +8,6 @@ import { IndexCommand } from './commands/indexCommand';
 import { SyncCommand } from './commands/syncCommand';
 import { ConfigManager } from './config/configManager';
 import { Context, SqliteVecVectorDatabase, AstCodeSplitter, LangChainCodeSplitter, SplitterType } from '@tan-yong-sheng/code-context-core';
-import { envManager } from '@tan-yong-sheng/code-context-core';
 import { getLogger } from './utils/logger';
 
 let semanticSearchProvider: SemanticSearchViewProvider;
@@ -50,6 +49,8 @@ export async function activate(context: vscode.ExtensionContext) {
         searchCommand = new SearchCommand(codeContext);
         indexCommand = new IndexCommand(codeContext);
         syncCommand = new SyncCommand(codeContext);
+        // Wire up IndexCommand reference to SyncCommand to prevent concurrent operations
+        syncCommand.setIndexCommand(indexCommand);
         semanticSearchProvider = new SemanticSearchViewProvider(context.extensionUri, searchCommand, indexCommand, syncCommand, configManager);
         logger.info('Commands and webview provider initialized');
 
@@ -187,14 +188,18 @@ function createContextWithConfig(configManager: ConfigManager): Context {
     const splitterConfig = configManager.getSplitterConfig();
     const advancedConfig = configManager.getAdvancedConfig();
 
+    // Get embedding dimension and batch size from embedding config
+    const embeddingDimension = (embeddingConfig?.config as any)?.embeddingDimension;
+    const embeddingBatchSize = (embeddingConfig?.config as any)?.embeddingBatchSize;
+
     logger.logConfig({
         hasEmbeddingConfig: !!embeddingConfig,
         provider: embeddingConfig?.provider,
         model: embeddingConfig?.config?.model,
         hasVectorDbConfig: !!vectorDbConfig,
         splitterType: splitterConfig?.type,
-        embeddingDimension: advancedConfig.embeddingDimension,
-        embeddingBatchSize: advancedConfig.embeddingBatchSize,
+        embeddingDimension: embeddingDimension,
+        embeddingBatchSize: embeddingBatchSize,
         customExtensionsCount: advancedConfig.customExtensions?.length,
         customIgnorePatternsCount: advancedConfig.customIgnorePatterns?.length
     });
@@ -206,13 +211,13 @@ function createContextWithConfig(configManager: ConfigManager): Context {
         const contextConfig: any = {};
 
         // Add advanced configuration if set
-        if (advancedConfig.embeddingDimension) {
-            contextConfig.embeddingDimension = advancedConfig.embeddingDimension;
-            logger.info(`Using custom embedding dimension: ${advancedConfig.embeddingDimension}`);
+        if (embeddingDimension) {
+            contextConfig.embeddingDimension = embeddingDimension;
+            logger.info(`Using custom embedding dimension: ${embeddingDimension}`);
         }
-        if (advancedConfig.embeddingBatchSize) {
-            contextConfig.embeddingBatchSize = advancedConfig.embeddingBatchSize;
-            logger.info(`Using custom embedding batch size: ${advancedConfig.embeddingBatchSize}`);
+        if (embeddingBatchSize) {
+            contextConfig.embeddingBatchSize = embeddingBatchSize;
+            logger.info(`Using custom embedding batch size: ${embeddingBatchSize}`);
         }
         if (advancedConfig.customExtensions && advancedConfig.customExtensions.length > 0) {
             contextConfig.customExtensions = advancedConfig.customExtensions;
@@ -222,14 +227,14 @@ function createContextWithConfig(configManager: ConfigManager): Context {
             contextConfig.customIgnorePatterns = advancedConfig.customIgnorePatterns;
             logger.info(`Custom ignore patterns: ${advancedConfig.customIgnorePatterns.join(', ')}`);
         }
+        if (advancedConfig.chunkLimit) {
+            contextConfig.chunkLimit = advancedConfig.chunkLimit;
+            logger.info(`Using custom chunk limit: ${advancedConfig.chunkLimit}`);
+        }
 
         // Create embedding instance
         if (embeddingConfig) {
             logger.debug(`Creating embedding instance for ${embeddingConfig.provider}...`);
-            // Merge Gemini baseURL if provided in advanced config
-            if (embeddingConfig.provider === 'Gemini' && advancedConfig.geminiBaseUrl) {
-                embeddingConfig.config.baseURL = advancedConfig.geminiBaseUrl;
-            }
             embedding = ConfigManager.createEmbeddingInstance(embeddingConfig.provider, embeddingConfig.config);
             logger.info(`Embedding initialized with ${embeddingConfig.provider} (model: ${embeddingConfig.config.model})`);
             contextConfig.embedding = embedding;
@@ -239,7 +244,12 @@ function createContextWithConfig(configManager: ConfigManager): Context {
 
         // Create vector database instance
         const defaultDbPath = path.join(os.homedir(), '.code-context', 'vectors');
-        const dbPath = vectorDbConfig?.dbPath || envManager.get('VECTOR_DB_PATH') || defaultDbPath;
+        // VSCode extension: only use settings value or hardcoded default (no env vars)
+        let dbPath = vectorDbConfig?.dbPath || defaultDbPath;
+        // Expand tilde (~) to home directory if present
+        if (dbPath.startsWith('~/')) {
+            dbPath = path.join(os.homedir(), dbPath.slice(2));
+        }
 
         logger.debug('Creating vector database instance...');
         vectorDatabase = new SqliteVecVectorDatabase({ dbPath });
@@ -310,9 +320,18 @@ function reloadContextConfiguration() {
         // Update vector database if configuration exists
         if (vectorDbConfig) {
             logger.debug('Updating vector database...');
-            const vectorDatabase = new SqliteVecVectorDatabase(vectorDbConfig);
+            // Apply default dbPath if not set (same logic as createContextWithConfig)
+            const defaultDbPath = path.join(os.homedir(), '.code-context', 'vectors');
+            // VSCode extension: only use settings value or hardcoded default (no env vars)
+            let dbPath = vectorDbConfig.dbPath || defaultDbPath;
+            // Expand tilde (~) to home directory if present
+            if (dbPath.startsWith('~/')) {
+                dbPath = path.join(os.homedir(), dbPath.slice(2));
+            }
+            logger.info(`Vector database path resolved to: ${dbPath}`);
+            const vectorDatabase = new SqliteVecVectorDatabase({ dbPath });
             codeContext.updateVectorDatabase(vectorDatabase);
-            logger.info(`Vector database updated with sqlite-vec (dbPath: ${vectorDbConfig.dbPath})`);
+            logger.info(`Vector database updated with sqlite-vec (dbPath: ${dbPath})`);
         }
 
         // Update splitter if configuration exists
@@ -343,6 +362,8 @@ function reloadContextConfiguration() {
         searchCommand.updateContext(codeContext);
         indexCommand.updateContext(codeContext);
         syncCommand.updateContext(codeContext);
+        // Re-wire the IndexCommand reference after context update
+        syncCommand.setIndexCommand(indexCommand);
 
         // Restart auto-sync if it was enabled
         logger.debug('Restarting auto-sync...');

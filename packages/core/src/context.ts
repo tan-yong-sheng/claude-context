@@ -96,6 +96,7 @@ export interface ContextConfig {
     customIgnorePatterns?: string[]; // New: custom ignore patterns from MCP
     embeddingDimension?: number; // New: manual override for embedding dimension
     embeddingBatchSize?: number; // New: manual override for embedding batch size
+    chunkLimit?: number; // New: maximum chunks to index (default: 450000)
     // MCP-specific configuration properties
     embeddingProvider?: string;
     embeddingModel?: string;
@@ -116,11 +117,13 @@ export class Context {
     private synchronizers = new Map<string, FileSynchronizer>();
     private configEmbeddingDimension?: number;
     private configEmbeddingBatchSize?: number;
+    private chunkLimit: number;
 
     constructor(config: ContextConfig = {}) {
         // Store config values for embedding dimension and batch size
         this.configEmbeddingDimension = config.embeddingDimension;
         this.configEmbeddingBatchSize = config.embeddingBatchSize;
+        this.chunkLimit = config.chunkLimit || 450000;
 
         // Initialize services
         this.embedding = config.embedding || new OpenAIEmbedding({
@@ -399,11 +402,11 @@ export class Context {
     }
 
     private async deleteFileChunks(collectionName: string, relativePath: string): Promise<void> {
-        // Escape backslashes for filter expression (Windows path compatibility)
-        const escapedPath = relativePath.replace(/\\/g, '\\\\');
+        // Escape backslashes for filter expression (Windows path compatibility) and single quotes for SQL
+        const escapedPath = relativePath.replace(/\\/g, '\\\\').replace(/'/g, "''");
         const results = await this.vectorDatabase.query(
             collectionName,
-            `relativePath == "${escapedPath}"`,
+            `relativePath == '${escapedPath}'`,
             ['id']
         );
 
@@ -667,16 +670,15 @@ export class Context {
         if (manualDimension && !isNaN(manualDimension) && manualDimension > 0) {
             dimension = manualDimension;
             const source = this.configEmbeddingDimension ? 'config' : 'EMBEDDING_DIMENSION env var';
-            console.log(`[Context] 📏 Using manually configured dimension: ${dimension} (from ${source})`);
-        } else if (envDimension) {
-            console.warn(`[Context] ⚠️ Invalid EMBEDDING_DIMENSION value: "${envDimension}". Falling back to auto-detection.`);
-            console.log(`[Context] 🔍 Detecting embedding dimension for ${this.embedding.getProvider()} provider...`);
-            dimension = await this.embedding.detectDimension();
-            console.log(`[Context] 📏 Auto-detected dimension: ${dimension} for ${this.embedding.getProvider()}`);
+            console.log(`[Context] 📏 Using configured dimension: ${dimension} (from ${source})`);
         } else {
-            console.log(`[Context] 🔍 Detecting embedding dimension for ${this.embedding.getProvider()} provider...`);
-            dimension = await this.embedding.detectDimension();
-            console.log(`[Context] 📏 Detected dimension: ${dimension} for ${this.embedding.getProvider()}`);
+            throw new Error(
+                `Embedding dimension is required but not configured.\n\n` +
+                `Please set the embedding dimension in your configuration:\n` +
+                `- For known models (e.g., text-embedding-3-small), dimension is auto-filled\n` +
+                `- For custom models, manually enter the dimension (e.g., 1536, 768)\n\n` +
+                `Provider: ${this.embedding.getProvider()}`
+            );
         }
         const dirName = path.basename(codebasePath);
 
@@ -738,19 +740,30 @@ export class Context {
         const envBatchSize = envManager.get('EMBEDDING_BATCH_SIZE');
         const manualBatchSize = this.configEmbeddingBatchSize || (envBatchSize ? parseInt(envBatchSize, 10) : undefined);
         const EMBEDDING_BATCH_SIZE = Math.max(1, manualBatchSize && !isNaN(manualBatchSize) ? manualBatchSize : 100);
-        const CHUNK_LIMIT = 450000;
         const source = this.configEmbeddingBatchSize ? 'config' : (envBatchSize ? 'EMBEDDING_BATCH_SIZE env var' : 'default');
         console.log(`[Context] 🔧 Using EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE} (from ${source})`);
+        console.log(`[Context] 🔧 Using CHUNK_LIMIT: ${this.chunkLimit}`);
 
         let chunkBuffer: Array<{ chunk: CodeChunk; codebasePath: string }> = [];
         let processedFiles = 0;
         let totalChunks = 0;
         let limitReached = false;
 
+        // Constants for file protection
+        const MAX_FILE_SIZE = 1024 * 1024; // 1MB - skip files larger than this
+        const MAX_CHUNKS_PER_FILE = 500; // Maximum chunks per file to prevent memory issues
+
         for (let i = 0; i < filePaths.length; i++) {
             const filePath = filePaths[i];
 
             try {
+                // Check file size first to avoid loading huge files
+                const stats = await fs.promises.stat(filePath);
+                if (stats.size > MAX_FILE_SIZE) {
+                    console.warn(`[Context] ⚠️  Skipping file ${filePath}: size ${Math.round(stats.size / 1024)}KB exceeds limit ${Math.round(MAX_FILE_SIZE / 1024)}KB`);
+                    continue;
+                }
+
                 const content = await fs.promises.readFile(filePath, 'utf-8');
 
                 // Skip empty files
@@ -760,13 +773,34 @@ export class Context {
                 }
 
                 const language = this.getLanguageFromExtension(path.extname(filePath));
-                const chunks = await this.codeSplitter.split(content, language, filePath);
+                let chunks: CodeChunk[];
+
+                // Wrap splitter call in try-catch to handle stack overflow errors
+                try {
+                    chunks = await this.codeSplitter.split(content, language, filePath);
+                } catch (splitError) {
+                    console.warn(`[Context] ⚠️  Splitter failed for ${filePath}, using fallback: ${splitError}`);
+                    // Create a single chunk for the entire file as fallback
+                    chunks = [{
+                        content: content.substring(0, this.configEmbeddingBatchSize || 10000), // Limit content
+                        metadata: {
+                            startLine: 1,
+                            endLine: content.split('\n').length,
+                            language: language || 'text',
+                            filePath: filePath
+                        }
+                    }];
+                }
+
+                // Limit chunks per file to prevent memory issues
+                if (chunks.length > MAX_CHUNKS_PER_FILE) {
+                    console.warn(`[Context] ⚠️  File ${filePath} generated ${chunks.length} chunks, limiting to ${MAX_CHUNKS_PER_FILE}`);
+                    chunks = chunks.slice(0, MAX_CHUNKS_PER_FILE);
+                }
 
                 // Log files with many chunks or large content
                 if (chunks.length > 50) {
-                    console.warn(`[Context] ⚠️  File ${filePath} generated ${chunks.length} chunks (${Math.round(content.length / 1024)}KB)`);
-                } else if (content.length > 100000) {
-                    console.log(`📄 Large file ${filePath}: ${Math.round(content.length / 1024)}KB -> ${chunks.length} chunks`);
+                    console.warn(`[Context] ⚠️  File ${filePath} has ${chunks.length} chunks (${Math.round(content.length / 1024)}KB)`);
                 }
 
                 // Add chunks to buffer
@@ -790,8 +824,8 @@ export class Context {
                     }
 
                     // Check if chunk limit is reached
-                    if (totalChunks >= CHUNK_LIMIT) {
-                        console.warn(`[Context] ⚠️  Chunk limit of ${CHUNK_LIMIT} reached. Stopping indexing.`);
+                    if (totalChunks >= this.chunkLimit) {
+                        console.warn(`[Context] ⚠️  Chunk limit of ${this.chunkLimit} reached. Stopping indexing.`);
                         limitReached = true;
                         break; // Exit the inner loop (over chunks)
                     }

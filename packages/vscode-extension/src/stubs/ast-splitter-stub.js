@@ -155,31 +155,47 @@ class AstCodeSplitterStub {
     }
 
     async split(code, language, filePath) {
+        const MAX_FILE_SIZE = 1024 * 1024; // 1MB limit
+        const MAX_CHUNKS = 500; // Maximum chunks per file
+
         try {
+            // Check file size first
+            if (code.length > MAX_FILE_SIZE) {
+                console.warn(`[AST Splitter] File ${filePath || 'unknown'} size ${Math.round(code.length / 1024)}KB exceeds limit, using simple split`);
+                // Return simple chunks for large files
+                return this.simpleChunkSplit(code, language, filePath);
+            }
+
             const parserReady = await this.initializeParser();
             if (!parserReady || !Parser) {
                 console.log('[AST Splitter] web-tree-sitter not available, using LangChain fallback');
-                return this.fallbackSplitter.split(code, language, filePath);
+                return await this.safeFallbackSplit(code, language, filePath);
             }
 
             const languageParser = await this.loadLanguage(language);
             if (!languageParser) {
                 console.log(`[AST Splitter] Language ${language} not supported by web AST, using LangChain fallback for: ${filePath || 'unknown'}`);
-                return await this.fallbackSplitter.split(code, language, filePath);
+                return await this.safeFallbackSplit(code, language, filePath);
             }
 
             // Ensure parser is available before setting language
             if (!this.parser) {
                 console.warn(`[AST Splitter] Parser not initialized, falling back to LangChain: ${filePath || 'unknown'}`);
-                return await this.fallbackSplitter.split(code, language, filePath);
+                return await this.safeFallbackSplit(code, language, filePath);
             }
 
             this.parser.setLanguage(languageParser);
+
+            // Yield before parsing large files to prevent blocking
+            if (code.length > 50000) {
+                await this.yieldToEventLoop();
+            }
+
             const tree = this.parser.parse(code);
 
             if (!tree || !tree.rootNode) {
                 console.warn(`[AST Splitter] Failed to parse AST for ${language}, falling back to LangChain: ${filePath || 'unknown'}`);
-                return await this.fallbackSplitter.split(code, language, filePath);
+                return await this.safeFallbackSplit(code, language, filePath);
             }
 
             console.log(`🌳 [AST Splitter] Using web-tree-sitter for ${language} file: ${filePath || 'unknown'}`);
@@ -190,14 +206,65 @@ class AstCodeSplitterStub {
             // Extract chunks based on AST nodes
             const chunks = this.extractChunks(tree.rootNode, code, nodeTypes, language, filePath);
 
+            // Limit chunk count
+            if (chunks.length > MAX_CHUNKS) {
+                console.warn(`[AST Splitter] File ${filePath || 'unknown'} generated ${chunks.length} chunks, limiting to ${MAX_CHUNKS}`);
+                return chunks.slice(0, MAX_CHUNKS);
+            }
+
+            // Yield before refining chunks
+            await this.yieldToEventLoop();
+
             // If chunks are too large, split them further
             const refinedChunks = await this.refineChunks(chunks, code);
 
             return refinedChunks;
         } catch (error) {
             console.warn(`[AST Splitter] web-tree-sitter failed for ${language}, falling back to LangChain:`, error);
-            return await this.fallbackSplitter.split(code, language, filePath);
+            return await this.safeFallbackSplit(code, language, filePath);
         }
+    }
+
+    /**
+     * Safe wrapper for fallback splitter that catches errors
+     */
+    async safeFallbackSplit(code, language, filePath) {
+        try {
+            return await this.fallbackSplitter.split(code, language, filePath);
+        } catch (error) {
+            console.error(`[AST Splitter] Fallback splitter also failed:`, error);
+            // Last resort: simple line-based chunking
+            return this.simpleChunkSplit(code, language, filePath);
+        }
+    }
+
+    /**
+     * Simple line-based chunking as last resort
+     */
+    simpleChunkSplit(code, language, filePath) {
+        const lines = code.split('\n');
+        const CHUNK_SIZE = 100; // lines per chunk
+        const chunks = [];
+
+        for (let i = 0; i < lines.length; i += CHUNK_SIZE) {
+            const chunkLines = lines.slice(i, i + CHUNK_SIZE);
+            chunks.push({
+                content: chunkLines.join('\n'),
+                metadata: {
+                    startLine: i + 1,
+                    endLine: Math.min(i + CHUNK_SIZE, lines.length),
+                    language: language || 'text',
+                    filePath: filePath
+                }
+            });
+
+            // Limit chunks
+            if (chunks.length >= 100) {
+                break;
+            }
+        }
+
+        return chunks;
     }
 
     extractChunks(node, code, nodeTypes, language, filePath) {
@@ -299,12 +366,17 @@ class AstCodeSplitterStub {
     async refineChunks(chunks, originalCode) {
         const refinedChunks = [];
 
-        for (const chunk of chunks) {
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
             if (chunk.content.length <= this.chunkSize) {
                 refinedChunks.push(chunk);
             } else {
                 // Chunk is too large, split it using LangChain splitter
                 console.log(`📏 [AST Splitter] Chunk too large (${chunk.content.length} chars), using LangChain for refinement`);
+
+                // Yield to event loop before processing large chunk to prevent blocking
+                await this.yieldToEventLoop();
+
                 const subChunks = await this.fallbackSplitter.split(
                     chunk.content,
                     chunk.metadata.language,
@@ -325,10 +397,25 @@ class AstCodeSplitterStub {
                     });
                     currentStartLine += subChunkLines;
                 }
+
+                // Yield to event loop after processing large chunk
+                await this.yieldToEventLoop();
+            }
+
+            // Yield every 10 chunks to keep extension responsive
+            if (i % 10 === 0 && i > 0) {
+                await this.yieldToEventLoop();
             }
         }
 
         return refinedChunks;
+    }
+
+    /**
+     * Yield control to the event loop to prevent blocking the VSCode extension host
+     */
+    async yieldToEventLoop() {
+        return new Promise(resolve => setImmediate(resolve));
     }
 
     setChunkSize(chunkSize) {
