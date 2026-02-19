@@ -112,7 +112,7 @@ $(EXPORTED_FUNCS_JSON): $(SRC_DIR)/api.js
 	perl -p0e 's/.*signatures = \{\n(.+?)\s*\}.*/\1/smg' $(SRC_DIR)/api.js | \
 		perl -pe 's/\s*(.+):.*/"_sqlite3_\1"/' | \
 		paste -sd "," - >> $@
-	echo ',"_malloc","_free","_sqlite_vec_auto_init"]' >> $@
+	echo ',"_malloc","_free","_sqlite_vec_init_for_db"]' >> $@
 
 # Link everything
 $(DIST_JS): $(OBJECT_FILES) $(EXPORTED_FUNCS_JSON) $(JS_PRE_FILES) $(JS_LIB_FILES) | $(DIST_DIR)

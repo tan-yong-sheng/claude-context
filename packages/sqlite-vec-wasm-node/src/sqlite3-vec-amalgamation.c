@@ -23,23 +23,9 @@
 #include "sqlite-vec.c"
 
 /*
- * Initialize sqlite-vec extension on a database connection.
- * This is called automatically for every new connection via sqlite3_auto_extension.
+ * Initialize sqlite-vec extension for a specific database connection.
+ * Called directly from JavaScript after opening a database.
  */
-static int core_init_sqlite_vec(
-    sqlite3 *db,
-    char **pzErrMsg,
-    const sqlite3_api_routines *pApi
-) {
-    /* When SQLITE_CORE is defined, the extension init function expects no pApi */
-    (void)pApi;
-    return sqlite3_vec_init(db, pzErrMsg, NULL);
-}
-
-/*
- * Called from vfs-pre.js after the WASM module is initialized.
- * Registers sqlite-vec to auto-initialize on all new database connections.
- */
-void sqlite_vec_auto_init(void) {
-    sqlite3_auto_extension((void(*)(void))core_init_sqlite_vec);
+int sqlite_vec_init_for_db(sqlite3 *db) {
+    return sqlite3_vec_init(db, NULL, NULL);
 }

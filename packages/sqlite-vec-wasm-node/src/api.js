@@ -111,10 +111,8 @@ Module.onRuntimeInitialized = () => {
     sqlite3[name] = cwrap(`sqlite3_${name}`, sig[0], sig[1]);
   }
 
-  // Initialize sqlite-vec extension for all new database connections
-  // This must be called after the WASM module is loaded
-  const sqliteVecAutoInit = cwrap("sqlite_vec_auto_init", null, []);
-  sqliteVecAutoInit();
+  // Setup sqlite-vec initialization function
+  sqlite3.vec_init_for_db = cwrap("sqlite_vec_init_for_db", "number", ["number"]);
 };
 
 class SQLite3Error extends Error {
@@ -246,6 +244,13 @@ class Database {
       if (this._ptr !== NULL) sqlite3.close_v2(this._ptr);
       throw new SQLite3Error(`Could not open the database "${filename}"`);
     }
+
+    // Initialize sqlite-vec extension for this database connection
+    const vecRc = sqlite3.vec_init_for_db(this._ptr);
+    if (vecRc !== SQLITE_OK) {
+      console.warn(`sqlite-vec initialization returned: ${vecRc}`);
+    }
+
     this._functions = new Map();
   }
 
