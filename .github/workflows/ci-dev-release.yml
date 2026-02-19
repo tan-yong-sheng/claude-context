@@ -5,12 +5,12 @@
 # Purpose:
 #   Combined CI and auto-release workflow for development versions.
 #   Runs tests and automatically publishes dev versions when on dev branch
-#   or when manually triggered with publish=true.
+#   or when manually triggered with publish_npm/publish_vscode inputs.
 #
 # Triggers:
 #   - push to master/main/dev branches
 #   - pull_request to master/main branches
-#   - workflow_dispatch with optional publish input
+#   - workflow_dispatch with optional publish_npm and publish_vscode inputs
 #
 # Jobs:
 #   - build-wasm: Build WASM module (required for core package)
@@ -19,8 +19,8 @@
 #   - publish-vscode-prerelease: Auto-publishes VSCode pre-release versions
 #
 # Outputs:
-#   - npm dev version published to registry
-#   - VSCode pre-release extension published to marketplace
+#   - npm dev version published to registry (if publish_npm=true)
+#   - VSCode pre-release extension published to marketplace (if publish_vscode=true)
 #
 # Related Workflows:
 #   - tests.yml: Primary CI without publishing
@@ -37,8 +37,16 @@ on:
     branches: [ master, main ]
   workflow_dispatch:
     inputs:
-      publish:
-        description: 'Publish packages (npm dev + vscode pre-release)'
+      publish_npm:
+        description: 'Publish NPM packages (dev tag)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      publish_vscode:
+        description: 'Publish VSCode extension (pre-release)'
         required: true
         default: 'false'
         type: choice
@@ -137,7 +145,7 @@ jobs:
     name: Publish NPM Dev Versions
     needs: [build-wasm, test]
     runs-on: ubuntu-latest
-    if: github.event.inputs.publish == 'true' || github.ref == 'refs/heads/dev'
+    if: github.event.inputs.publish_npm == 'true' || github.ref == 'refs/heads/dev'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -185,7 +193,7 @@ jobs:
     name: Publish VSCode Extension Pre-release
     needs: [build-wasm, test]
     runs-on: ubuntu-latest
-    if: github.event.inputs.publish == 'true' || github.ref == 'refs/heads/dev'
+    if: github.event.inputs.publish_vscode == 'true' || github.ref == 'refs/heads/dev'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
