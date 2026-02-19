@@ -120,12 +120,38 @@ console.log('Debug: pnpmStore =', pnpmStore);
 console.log('Debug: Checking if sourceDir exists:', fs.existsSync(sourceDir));
 console.log('Debug: Checking if pnpmStore exists:', fs.existsSync(pnpmStore));
 
+// List what's in local node_modules
+if (fs.existsSync(sourceDir)) {
+    const localEntries = fs.readdirSync(sourceDir);
+    console.log('Debug: local node_modules entries (first 20):', localEntries.slice(0, 20).join(', '));
+    console.log('Debug: better-sqlite3 in local node_modules:', localEntries.includes('better-sqlite3'));
+}
+
 // List contents of pnpmStore if it exists
 if (fs.existsSync(pnpmStore)) {
     const entries = fs.readdirSync(pnpmStore);
     console.log('Debug: pnpmStore entries (first 20):', entries.slice(0, 20).join(', '));
     const betterSqlite3Entries = entries.filter(e => e.startsWith('better-sqlite3'));
     console.log('Debug: better-sqlite3 entries in pnpmStore:', betterSqlite3Entries.join(', ') || 'none');
+}
+
+// Also check root node_modules directly
+const rootNodeModules = path.resolve(__dirname, '../../../node_modules');
+console.log('Debug: rootNodeModules =', rootNodeModules);
+console.log('Debug: rootNodeModules exists:', fs.existsSync(rootNodeModules));
+if (fs.existsSync(rootNodeModules)) {
+    const rootEntries = fs.readdirSync(rootNodeModules);
+    console.log('Debug: rootNodeModules entries (first 20):', rootEntries.slice(0, 20).join(', '));
+    console.log('Debug: better-sqlite3 in rootNodeModules:', rootEntries.includes('better-sqlite3'));
+
+    // Check if .pnpm has entries in root node_modules
+    const rootPnpm = path.join(rootNodeModules, '.pnpm');
+    if (fs.existsSync(rootPnpm)) {
+        const rootPnpmEntries = fs.readdirSync(rootPnpm);
+        console.log('Debug: root .pnpm entries (first 20):', rootPnpmEntries.slice(0, 20).join(', '));
+        const rootBetterSqlite3 = rootPnpmEntries.filter(e => e.startsWith('better-sqlite3'));
+        console.log('Debug: better-sqlite3 entries in root .pnpm:', rootBetterSqlite3.join(', ') || 'none');
+    }
 }
 
 // Check if already rebuilt (CI environments may have already done this)
@@ -168,6 +194,23 @@ function findPackageSource(dep) {
         return src;
     }
 
+    // Check root node_modules (for pnpm workspace hoisted deps)
+    const rootNodeModules = path.resolve(__dirname, '../../../node_modules');
+    const rootSrc = path.join(rootNodeModules, dep);
+    if (fs.existsSync(rootSrc)) {
+        // Check if it's a symlink and resolve it
+        try {
+            const stats = fs.lstatSync(rootSrc);
+            if (stats.isSymbolicLink()) {
+                const linkTarget = fs.readlinkSync(rootSrc);
+                return path.resolve(rootNodeModules, linkTarget);
+            }
+        } catch (e) {
+            // Not a symlink, use as-is
+        }
+        return rootSrc;
+    }
+
     // Look in pnpm store for platform-specific packages
     if (dep.startsWith('sqlite-vec-')) {
         const entries = fs.readdirSync(pnpmStore);
@@ -179,13 +222,17 @@ function findPackageSource(dep) {
 
     // Look in pnpm store for better-sqlite3
     if (dep === 'better-sqlite3') {
-        const entries = fs.readdirSync(pnpmStore);
-        // Find the matching better-sqlite3 version
-        const matchingEntries = entries.filter(e => e.startsWith('better-sqlite3@'));
-        if (matchingEntries.length > 0) {
-            // Use the latest version
-            const latest = matchingEntries.sort()[matchingEntries.length - 1];
-            return path.join(pnpmStore, latest, 'node_modules', dep);
+        // Check both local pnpm store and root pnpm store
+        const stores = [pnpmStore, path.join(rootNodeModules, '.pnpm')];
+        for (const store of stores) {
+            if (fs.existsSync(store)) {
+                const entries = fs.readdirSync(store);
+                const matchingEntries = entries.filter(e => e.startsWith('better-sqlite3@'));
+                if (matchingEntries.length > 0) {
+                    const latest = matchingEntries.sort()[matchingEntries.length - 1];
+                    return path.join(store, latest, 'node_modules', dep);
+                }
+            }
         }
     }
 
