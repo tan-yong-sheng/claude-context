@@ -358,7 +358,6 @@ describe('Context Embedding Configuration Integration Tests', () => {
 
         // Skip this test due to mock background sync timing issues between tests
         // The semantic search functionality is tested in e2e tests
-        // eslint-disable-next-line jest/no-disabled-tests
         xit('semantic search works with custom dimension', async () => {
             const customDimension = 512;
 
