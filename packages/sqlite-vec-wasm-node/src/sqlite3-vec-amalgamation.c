@@ -33,7 +33,7 @@ static int core_init_sqlite_vec(
 ) {
     /* When SQLITE_CORE is defined, the extension init function expects no pApi */
     (void)pApi;
-    return sqlite3_sqlitevec_init(db, pzErrMsg, NULL);
+    return sqlite3_vec_init(db, pzErrMsg, NULL);
 }
 
 /*
