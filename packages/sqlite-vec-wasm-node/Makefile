@@ -16,7 +16,7 @@ SQLITE_VEC_SRC_FILES = sqlite-vec-src/sqlite-vec.c sqlite-vec-src/sqlite-vec.h
 SRC_DIR = src
 JS_PRE_FILES = $(SRC_DIR)/api.js $(SRC_DIR)/vfs-pre.js
 JS_LIB_FILES = $(SRC_DIR)/vfs.js
-OBJECT_FILES = build/sqlite3.o build/sqlite-vec.o build/vfs.o
+OBJECT_FILES = build/sqlite3.o build/vfs.o
 EXPORTED_FUNCS_JSON = build/exp_funcs.json
 
 # SQLite compile flags
