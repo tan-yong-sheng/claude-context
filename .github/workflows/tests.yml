@@ -14,7 +14,7 @@
 #   - test-core: Unit tests for core package (Node 20.x, 22.x)
 #   - test-mcp: Unit tests for MCP package (Node 20.x, 22.x)
 #   - coverage-summary: Aggregates coverage reports
-#   - test-e2e: E2E tests (PR only, skipped on push)
+#   - test-e2e: E2E tests
 #   - lint: Code style checks
 #
 # Artifacts:
@@ -168,9 +168,7 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [test-core, test-mcp]
-    # Only run E2E tests on pull requests, not on push events
-    # This saves CI resources since E2E tests take longer
-    if: github.event_name == 'pull_request'
+    # Run E2E tests on both pull requests and push events to main/master
 
     steps:
     - name: Checkout code
