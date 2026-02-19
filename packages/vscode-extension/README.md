@@ -6,9 +6,6 @@ A code indexing and semantic search VSCode extension powered by [Code Context](h
 
 > 📖 **New to Code Context?** Check out the [main project README](https://github.com/tan-yong-sheng/code-context/blob/master/README.md) for an overview and setup instructions.
 
-
-![img](https://lh7-rt.googleusercontent.com/docsz/AD_4nXdtCtT9Qi6o5mGVoxzX50r8Nb6zDFcjvTQR7WZ-xMbEsHEPPhSYAFVJ7q4-rETzxJ8wy1cyZmU8CmtpNhAU8PGOqVnE2kc2HCn1etDg97Qsh7m89kBjG4ZT7XBgO4Dp7BfFZx7eow?key=qYdFquJrLcfXCUndY-YRBQ)
-
 ## Features
 
 - 🔍 **Semantic Search**: Intelligent code search based on semantic understanding, not just keyword matching

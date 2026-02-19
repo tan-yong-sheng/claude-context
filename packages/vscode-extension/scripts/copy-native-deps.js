@@ -67,20 +67,8 @@ function copyRecursive(src, dest) {
 }
 
 // Rebuild better-sqlite3 for the target Node.js version
-function rebuildBetterSqlite3() {
+function rebuildBetterSqlite3(betterSqlite3Path) {
     console.log(`\nRebuilding better-sqlite3 for Node.js v${TARGET_NODE_VERSION}...`);
-
-    // Use findPackageSource to locate better-sqlite3 (handles pnpm workspace structure)
-    const betterSqlite3Path = findPackageSource('better-sqlite3');
-
-    if (!betterSqlite3Path || !fs.existsSync(betterSqlite3Path)) {
-        console.error('Error: better-sqlite3 not found in node_modules');
-        console.error('Checked paths:');
-        console.error(`  - ${path.join(sourceDir, 'better-sqlite3')}`);
-        console.error(`  - pnpm store: ${pnpmStore}`);
-        process.exit(1);
-    }
-
     console.log(`Found better-sqlite3 at: ${betterSqlite3Path}`);
 
     try {
@@ -125,13 +113,23 @@ if (!betterSqlite3ModulePath) {
     console.error(`  - pnpm store: ${pnpmStore}`);
     process.exit(1);
 }
+
 const prebuiltBinary = path.join(betterSqlite3ModulePath, 'build', 'Release', 'better_sqlite3.node');
 
-if (fs.existsSync(prebuiltBinary)) {
-    console.log(`✓ better-sqlite3 binary already exists at ${prebuiltBinary}, skipping rebuild`);
+// Check if we need to rebuild for a different Node version
+// TARGET_NODE_VERSION should be set to VS Code's Node version (e.g., 22.21.1)
+const currentNodeVersion = process.version.substring(1);
+const isDifferentTarget = TARGET_NODE_VERSION !== currentNodeVersion;
+
+if (fs.existsSync(prebuiltBinary) && !isDifferentTarget) {
+    console.log(`✓ better-sqlite3 binary already exists for Node ${currentNodeVersion} at ${prebuiltBinary}, skipping rebuild`);
+} else if (fs.existsSync(prebuiltBinary) && isDifferentTarget) {
+    console.log(`! better-sqlite3 binary exists for Node ${currentNodeVersion}, but we need Node ${TARGET_NODE_VERSION}`);
+    console.log(`  Rebuilding for VS Code's Node version...`);
+    rebuildBetterSqlite3(betterSqlite3ModulePath);
 } else {
-    // Rebuild better-sqlite3 for the correct Electron version
-    rebuildBetterSqlite3();
+    // No binary exists, rebuild
+    rebuildBetterSqlite3(betterSqlite3ModulePath);
 }
 
 // Helper to find package source

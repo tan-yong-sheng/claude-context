@@ -138,20 +138,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libsqlite3-dev
 
-      - name: Rebuild better-sqlite3 for Node.js
-        env:
-          TARGET_NODE_VERSION: ${{ needs.setup.outputs.node_version }}
-          TARGET_ARCH: ${{ matrix.arch }}
-          npm_config_target: ${{ needs.setup.outputs.node_version }}
-          npm_config_runtime: node
-          npm_config_disturl: https://nodejs.org/dist
-          npm_config_build_from_source: 'true'
-          npm_config_arch: ${{ matrix.arch }}
-          npm_config_target_arch: ${{ matrix.arch }}
-        run: |
-          cd packages/vscode-extension
-          pnpm rebuild-native:ci
-
       - name: Build core package
         run: pnpm --filter @tan-yong-sheng/code-context-core build
 
@@ -161,6 +147,8 @@ jobs:
           pnpm webpack
 
       - name: Copy native dependencies
+        env:
+          TARGET_NODE_VERSION: ${{ needs.setup.outputs.node_version }}
         run: |
           cd packages/vscode-extension
           node scripts/copy-native-deps.js
