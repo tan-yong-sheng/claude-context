@@ -182,6 +182,9 @@ jobs:
           - runner: windows-latest
             target: win32-x64
 
+    env:
+      TARGET_NODE_VERSION: '22.21.1'
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -220,8 +223,6 @@ jobs:
           pnpm webpack
 
       - name: Copy native dependencies
-        env:
-          TARGET_NODE_VERSION: '22.21.1'
         run: |
           cd packages/vscode-extension
           node scripts/copy-native-deps.js

@@ -117,6 +117,9 @@ jobs:
             arch: x64
             target: win32-x64
 
+    env:
+      TARGET_NODE_VERSION: ${{ needs.setup.outputs.node_version }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -155,8 +158,6 @@ jobs:
           pnpm webpack
 
       - name: Copy native dependencies
-        env:
-          TARGET_NODE_VERSION: ${{ needs.setup.outputs.node_version }}
         run: |
           cd packages/vscode-extension
           node scripts/copy-native-deps.js
@@ -190,6 +191,8 @@ jobs:
   build-universal:
     needs: setup
     runs-on: ubuntu-latest
+    env:
+      TARGET_NODE_VERSION: ${{ needs.setup.outputs.node_version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
