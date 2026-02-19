@@ -70,12 +70,18 @@ function copyRecursive(src, dest) {
 function rebuildBetterSqlite3() {
     console.log(`\nRebuilding better-sqlite3 for Node.js v${TARGET_NODE_VERSION}...`);
 
-    const betterSqlite3Path = path.join(sourceDir, 'better-sqlite3');
+    // Use findPackageSource to locate better-sqlite3 (handles pnpm workspace structure)
+    const betterSqlite3Path = findPackageSource('better-sqlite3');
 
-    if (!fs.existsSync(betterSqlite3Path)) {
+    if (!betterSqlite3Path || !fs.existsSync(betterSqlite3Path)) {
         console.error('Error: better-sqlite3 not found in node_modules');
+        console.error('Checked paths:');
+        console.error(`  - ${path.join(sourceDir, 'better-sqlite3')}`);
+        console.error(`  - pnpm store: ${pnpmStore}`);
         process.exit(1);
     }
+
+    console.log(`Found better-sqlite3 at: ${betterSqlite3Path}`);
 
     try {
         // Use node-gyp to compile for the correct Node.js version
@@ -109,11 +115,16 @@ function rebuildBetterSqlite3() {
 console.log('Copying native dependencies to dist/node_modules...');
 
 // Check if already rebuilt (CI environments may have already done this)
-const betterSqlite3ModulePath = path.join(sourceDir, 'better-sqlite3');
+// Use findPackageSource to handle pnpm workspace structure
+const betterSqlite3ModulePath = findPackageSource('better-sqlite3');
+if (!betterSqlite3ModulePath) {
+    console.error('Error: better-sqlite3 not found in node_modules');
+    process.exit(1);
+}
 const prebuiltBinary = path.join(betterSqlite3ModulePath, 'build', 'Release', 'better_sqlite3.node');
 
 if (fs.existsSync(prebuiltBinary)) {
-    console.log('✓ better-sqlite3 binary already exists, skipping rebuild');
+    console.log(`✓ better-sqlite3 binary already exists at ${prebuiltBinary}, skipping rebuild`);
 } else {
     // Rebuild better-sqlite3 for the correct Electron version
     rebuildBetterSqlite3();
@@ -124,19 +135,18 @@ function findPackageSource(dep) {
     // First check local node_modules
     let src = path.join(sourceDir, dep);
     if (fs.existsSync(src)) {
-        return src;
-    }
-
-    // Check if it's a symlink and resolve it
-    try {
-        const stats = fs.lstatSync(src);
-        if (stats.isSymbolicLink()) {
-            const linkTarget = fs.readlinkSync(src);
-            // Resolve relative to the node_modules directory
-            return path.resolve(sourceDir, linkTarget);
+        // Check if it's a symlink and resolve it
+        try {
+            const stats = fs.lstatSync(src);
+            if (stats.isSymbolicLink()) {
+                const linkTarget = fs.readlinkSync(src);
+                // Resolve relative to the node_modules directory
+                return path.resolve(sourceDir, linkTarget);
+            }
+        } catch (e) {
+            // Not a symlink, use as-is
         }
-    } catch (e) {
-        // Not a symlink, continue
+        return src;
     }
 
     // Look in pnpm store for platform-specific packages
@@ -145,6 +155,18 @@ function findPackageSource(dep) {
         const matchingEntry = entries.find(e => e.startsWith(dep + '@'));
         if (matchingEntry) {
             return path.join(pnpmStore, matchingEntry, 'node_modules', dep);
+        }
+    }
+
+    // Look in pnpm store for better-sqlite3
+    if (dep === 'better-sqlite3') {
+        const entries = fs.readdirSync(pnpmStore);
+        // Find the matching better-sqlite3 version
+        const matchingEntries = entries.filter(e => e.startsWith('better-sqlite3@'));
+        if (matchingEntries.length > 0) {
+            // Use the latest version
+            const latest = matchingEntries.sort()[matchingEntries.length - 1];
+            return path.join(pnpmStore, latest, 'node_modules', dep);
         }
     }
 
