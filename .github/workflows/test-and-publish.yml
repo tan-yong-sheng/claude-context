@@ -47,9 +47,7 @@ jobs:
           sudo apt-get install -y build-essential python3 make g++
 
       - name: Rebuild better-sqlite3
-        run: |
-          cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
-          npm run build-release
+        run: pnpm rebuild better-sqlite3
 
       - name: Build packages
         run: |
@@ -95,9 +93,7 @@ jobs:
           sudo apt-get install -y build-essential python3 make g++
 
       - name: Rebuild better-sqlite3
-        run: |
-          cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
-          npm run build-release
+        run: pnpm rebuild better-sqlite3
 
       - name: Build and publish core package
         working-directory: packages/core
@@ -146,9 +142,7 @@ jobs:
           sudo apt-get install -y build-essential python3 make g++
 
       - name: Rebuild better-sqlite3
-        run: |
-          cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
-          npm run build-release
+        run: pnpm rebuild better-sqlite3
 
       - name: Build core package
         working-directory: packages/core

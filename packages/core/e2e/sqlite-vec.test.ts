@@ -19,7 +19,7 @@ import {
     setupTests,
     teardownTests
 } from './setup';
-import { MockEmbeddingProvider } from './helpers/mock-embedding';
+import { MockEmbeddingProvider, MOCK_EMBEDDING_DIMENSION } from './helpers/mock-embedding';
 import {
     getVectorDbPath,
     getPathHash,
@@ -233,7 +233,8 @@ describe('sqlite-vec E2E Tests', () => {
             const embedding = new MockEmbeddingProvider();
             const context = new Context({
                 embedding,
-                vectorDatabase: db
+                vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION
             });
 
             // Create test files
@@ -249,7 +250,8 @@ describe('sqlite-vec E2E Tests', () => {
             const embedding = new MockEmbeddingProvider();
             const context = new Context({
                 embedding,
-                vectorDatabase: db
+                vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION
             });
 
             // Create test files and index
@@ -268,7 +270,8 @@ describe('sqlite-vec E2E Tests', () => {
             const embedding = new MockEmbeddingProvider();
             const context = new Context({
                 embedding,
-                vectorDatabase: db
+                vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION
             });
 
             const fixturePath = getFixturePath('typescript-project');
@@ -283,7 +286,8 @@ describe('sqlite-vec E2E Tests', () => {
             const embedding = new MockEmbeddingProvider();
             const context = new Context({
                 embedding,
-                vectorDatabase: db
+                vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION
             });
 
             const fixturePath = getFixturePath('python-project');
@@ -298,7 +302,8 @@ describe('sqlite-vec E2E Tests', () => {
             const embedding = new MockEmbeddingProvider();
             const context = new Context({
                 embedding,
-                vectorDatabase: db
+                vectorDatabase: db,
+                embeddingDimension: MOCK_EMBEDDING_DIMENSION
             });
 
             const fixturePath = getFixturePath('typescript-project');
@@ -320,8 +325,8 @@ describe('sqlite-vec E2E Tests', () => {
             const db1 = new SqliteVecVectorDatabase({});
             const db2 = new SqliteVecVectorDatabase({});
 
-            const context1 = new Context({ embedding, vectorDatabase: db1 });
-            const context2 = new Context({ embedding, vectorDatabase: db2 });
+            const context1 = new Context({ embedding, vectorDatabase: db1, embeddingDimension: MOCK_EMBEDDING_DIMENSION });
+            const context2 = new Context({ embedding, vectorDatabase: db2, embeddingDimension: MOCK_EMBEDDING_DIMENSION });
 
             const tsProject = getFixturePath('typescript-project');
             const pyProject = getFixturePath('python-project');

@@ -99,7 +99,7 @@ module.exports = {
         new CopyWebpackPlugin({
             patterns: [
                 {
-                    from: path.resolve(__dirname, 'node_modules/web-tree-sitter/tree-sitter.wasm'),
+                    from: path.resolve(__dirname, '../../node_modules/web-tree-sitter/tree-sitter.wasm'),
                     to: path.resolve(__dirname, 'dist/tree-sitter.wasm')
                 },
                 // Copy all WASM parsers from wasm directory
