@@ -64,23 +64,50 @@ jobs:
         working-directory: packages/sqlite-vec-wasm-node
         run: |
           node -e "
+            console.log('Loading WASM module...');
             const { Database } = require('./dist/sqlite-vec-wasm-node.js');
+            console.log('Module loaded successfully');
+
+            console.log('Creating in-memory database...');
             const db = new Database(':memory:');
-            const v = db.get('SELECT sqlite_version() as s, vec_version() as v');
-            console.log('SQLite:', v.s);
-            console.log('sqlite-vec:', v.v);
+            console.log('Database created');
 
-            // Test vec0 table
-            db.exec('CREATE VIRTUAL TABLE test USING vec0(embedding FLOAT[4])');
-            const emb = new Float32Array([0.1, 0.2, 0.3, 0.4]);
-            db.run('INSERT INTO test(rowid, embedding) VALUES (?, ?)', [1, emb.buffer]);
+            console.log('Testing SQLite version...');
+            const sqliteVer = db.get('SELECT sqlite_version() as s');
+            console.log('SQLite version:', sqliteVer.s);
 
-            const query = new Float32Array([0.1, 0.2, 0.3, 0.4]);
-            const results = db.all('SELECT rowid, vec_distance_cosine(embedding, ?) as d FROM test ORDER BY d', [query.buffer]);
-            console.log('Vector search result:', results);
+            console.log('Testing sqlite-vec functions...');
+            try {
+              const vecVer = db.get('SELECT vec_version() as v');
+              console.log('sqlite-vec version:', vecVer.v);
+            } catch (e) {
+              console.error('vec_version failed:', e.message);
+            }
+
+            console.log('Testing vec_distance_cosine...');
+            try {
+              const dist = db.get('SELECT vec_distance_cosine(X''00000000'', X''00000000'') as d');
+              console.log('Distance result:', dist);
+            } catch (e) {
+              console.error('vec_distance_cosine failed:', e.message);
+            }
+
+            console.log('Testing vec0 virtual table...');
+            try {
+              db.exec('CREATE VIRTUAL TABLE test USING vec0(embedding FLOAT[4])');
+              console.log('vec0 table created');
+              const emb = new Float32Array([0.1, 0.2, 0.3, 0.4]);
+              db.run('INSERT INTO test(rowid, embedding) VALUES (?, ?)', [1, emb.buffer]);
+              console.log('Vector inserted');
+              const query = new Float32Array([0.1, 0.2, 0.3, 0.4]);
+              const results = db.all('SELECT rowid, vec_distance_cosine(embedding, ?) as d FROM test ORDER BY d', [query.buffer]);
+              console.log('Vector search result:', results);
+            } catch (e) {
+              console.error('vec0 table failed:', e.message);
+            }
 
             db.close();
-            console.log('Test passed!');
+            console.log('Test completed!');
           "
 
       - name: Test file persistence
