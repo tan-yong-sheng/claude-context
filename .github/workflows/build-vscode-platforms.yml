@@ -65,46 +65,54 @@ jobs:
     outputs:
       vs_code_version: ${{ steps.version.outputs.vs_code_version }}
       node_version: ${{ steps.version.outputs.node_version }}
+      electron_version: ${{ steps.version.outputs.electron_version }}
     steps:
       - name: Determine versions
         id: version
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "vs_code_version=${{ inputs.vs_code_version }}" >> $GITHUB_OUTPUT
+            echo "electron_version=${{ inputs.electron_version }}" >> $GITHUB_OUTPUT
             # VS Code 1.109 uses Node 22.21.1
             echo "node_version=22.21.1" >> $GITHUB_OUTPUT
           else
             # Default versions for tag pushes
             echo "vs_code_version=1.109.4" >> $GITHUB_OUTPUT
+            echo "electron_version=39.3.0" >> $GITHUB_OUTPUT
             # VS Code 1.109 uses Node 22.21.1
             echo "node_version=22.21.1" >> $GITHUB_OUTPUT
           fi
 
-  # Build on multiple platforms
+  # Build on multiple platforms with native runners
   build-matrix:
     needs: setup
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Linux x64 - uses standard ubuntu-latest (x64)
+          - runner: ubuntu-latest
             platform: linux
             arch: x64
             target: linux-x64
-          - os: ubuntu-latest
+          # Linux ARM64 - uses native ARM64 runner (public preview)
+          - runner: ubuntu-24.04-arm
             platform: linux
             arch: arm64
             target: linux-arm64
-          - os: macos-latest
-            platform: darwin
-            arch: x64
-            target: darwin-x64
-          - os: macos-latest
+          # macOS ARM64 (Apple Silicon) - macos-latest is M1/M2
+          - runner: macos-latest
             platform: darwin
             arch: arm64
             target: darwin-arm64
-          - os: windows-latest
+          # macOS x64 (Intel) - needs explicit intel runner
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+            target: darwin-x64
+          # Windows x64
+          - runner: windows-latest
             platform: win32
             arch: x64
             target: win32-x64
