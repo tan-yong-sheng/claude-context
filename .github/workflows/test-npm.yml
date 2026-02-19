@@ -1,38 +1,50 @@
 # =============================================================================
-# Workflow: Tests (Primary CI)
+# Workflow: Test NPM Packages
 # =============================================================================
 #
 # Purpose:
-#   Primary continuous integration workflow for core and MCP packages.
-#   Runs unit tests with coverage, E2E tests (PR only), and linting.
+#   Comprehensive testing for NPM packages (@tan-yong-sheng/code-context-core
+#   and @tan-yong-sheng/code-context-mcp). Runs unit tests with coverage
+#   and cross-platform E2E tests.
 #
 # Triggers:
 #   - push to main/master branches
 #   - pull_request to main/master branches
+#   - workflow_dispatch (manual)
 #
 # Jobs:
 #   - build-wasm: Build WASM module (required for core package)
-#   - test-core: Unit tests for core package (Node 20.x, 22.x)
-#   - test-mcp: Unit tests for MCP package (Node 20.x, 22.x)
-#   - coverage-summary: Aggregates coverage reports
-#   - test-e2e: E2E tests
+#   - test-unit: Unit tests with coverage for core and MCP (Node 20.x, 22.x)
+#   - test-e2e-matrix: Cross-platform E2E tests (Ubuntu, macOS, Windows)
 #   - lint: Code style checks
 #
 # Artifacts:
 #   - Coverage reports for core and MCP packages
+#   - Test results per platform
 #
 # Related Workflows:
-#   - tests-e2e-matrix.yml: Comprehensive cross-platform E2E tests
-#   - tests-vscode.yml: VSCode extension tests
+#   - test-vscode.yml: VSCode extension tests
+#   - build-sqlite-vec-wasm.yml: WASM module build
 # =============================================================================
 
-name: Tests
+name: Test NPM Packages
 
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'packages/core/**'
+      - 'packages/mcp/**'
+      - 'packages/sqlite-vec-wasm-node/**'
+      - '.github/workflows/test-npm.yml'
   pull_request:
     branches: [ main, master ]
+    paths:
+      - 'packages/core/**'
+      - 'packages/mcp/**'
+      - 'packages/sqlite-vec-wasm-node/**'
+      - '.github/workflows/test-npm.yml'
+  workflow_dispatch:
 
 jobs:
   # Build WASM module first (required for core package)
@@ -79,8 +91,9 @@ jobs:
           packages/sqlite-vec-wasm-node/dist/
         retention-days: 1
 
-  test-core:
-    name: Test Core Package
+  # Unit tests with coverage
+  test-unit:
+    name: Unit Tests
     runs-on: ubuntu-latest
     needs: build-wasm
 
@@ -127,21 +140,39 @@ jobs:
         name: core-coverage-report
         path: packages/core/coverage
 
-  test-mcp:
-    name: Test MCP Package
-    runs-on: ubuntu-latest
-    needs: [build-wasm, test-core]
+    - name: Build MCP package
+      run: pnpm build:mcp
+
+    - name: Run MCP tests with coverage
+      run: |
+        cd packages/mcp
+        pnpm test:coverage
+
+    - name: Upload MCP coverage report
+      uses: actions/upload-artifact@v4
+      if: matrix.node-version == '20.x'
+      with:
+        name: mcp-coverage-report
+        path: packages/mcp/coverage
+
+  # Cross-platform E2E tests
+  test-e2e-matrix:
+    name: E2E Tests
+    needs: build-wasm
+    runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [20.x, 22.x]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [20.x]
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v2
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
       with:
         version: 10
 
@@ -161,26 +192,34 @@ jobs:
         path: packages/sqlite-vec-wasm-node/dist/
 
     - name: Build packages
-      run: |
-        pnpm build:core
-        pnpm build:mcp
+      run: pnpm build:core
 
-    - name: Run MCP tests with coverage
+    - name: Run E2E tests
       run: |
-        cd packages/mcp
-        pnpm test:coverage
+        cd packages/core
+        pnpm test:e2e
 
-    - name: Upload MCP coverage report
+    - name: Upload test results
+      if: always()
       uses: actions/upload-artifact@v4
-      if: matrix.node-version == '20.x'
       with:
-        name: mcp-coverage-report
-        path: packages/mcp/coverage
+        name: e2e-test-results-${{ matrix.os }}-node-${{ matrix.node-version }}
+        path: |
+          packages/core/e2e-results/
+          packages/core/coverage/
 
+    - name: Upload test database artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-databases-${{ matrix.os }}-node-${{ matrix.node-version }}
+        path: ~/.code-context/vectors/
+
+  # Coverage summary
   coverage-summary:
     name: Coverage Summary
     runs-on: ubuntu-latest
-    needs: [test-core, test-mcp]
+    needs: test-unit
     if: always()
 
     steps:
@@ -218,45 +257,7 @@ jobs:
           echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
         fi
 
-  test-e2e:
-    name: E2E Tests
-    runs-on: ubuntu-latest
-    needs: [build-wasm, test-core, test-mcp]
-    # Run E2E tests on both pull requests and push events to main/master
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v2
-      with:
-        version: 10
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20.x
-        cache: 'pnpm'
-
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
-
-    - name: Download WASM artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: wasm-module
-        path: packages/sqlite-vec-wasm-node/dist/
-
-    - name: Build all packages
-      run: pnpm build
-
-    - name: Run E2E tests
-      run: |
-        cd packages/core
-        pnpm test:e2e
-      continue-on-error: true
-
+  # Lint check
   lint:
     name: Lint
     runs-on: ubuntu-latest

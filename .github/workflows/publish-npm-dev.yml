@@ -1,52 +1,41 @@
 # =============================================================================
-# Workflow: CI Dev Release
+# Workflow: Publish NPM Dev Versions
 # =============================================================================
 #
 # Purpose:
-#   Combined CI and auto-release workflow for development versions.
-#   Runs tests and automatically publishes dev versions when on dev branch
-#   or when manually triggered with publish_npm/publish_vscode inputs.
+#   Publishes development versions of NPM packages with 'dev' tag.
+#   Triggered manually or automatically on dev branch pushes.
 #
 # Triggers:
-#   - push to master/main/dev branches
-#   - pull_request to master/main branches
-#   - workflow_dispatch with optional publish_npm and publish_vscode inputs
+#   - push to dev branch (auto-publish)
+#   - workflow_dispatch (manual with choice to skip tests)
+#
+# Inputs:
+#   - skip_tests: Set to 'true' to skip running tests (default: false)
 #
 # Jobs:
-#   - build-wasm: Build WASM module (required for core package)
-#   - test: Runs tests on Node 20.x and 22.x
-#   - publish-npm-dev: Auto-publishes npm dev versions (dev branch or manual)
-#   - publish-vscode-prerelease: Auto-publishes VSCode pre-release versions
+#   - build-wasm: Build WASM module
+#   - test: Run tests (unless skipped)
+#   - publish: Publish core and MCP packages to NPM
 #
-# Outputs:
-#   - npm dev version published to registry (if publish_npm=true)
-#   - VSCode pre-release extension published to marketplace (if publish_vscode=true)
+# Published Packages:
+#   - @tan-yong-sheng/code-context-core@dev
+#   - @tan-yong-sheng/code-context-mcp@dev
 #
 # Related Workflows:
-#   - tests.yml: Primary CI without publishing
-#   - release-npm-manual.yml: Manual npm releases
-#   - release-vscode-manual.yml: Manual VSCode releases
+#   - test-npm.yml: NPM package testing
+#   - publish-npm.yml: Production NPM releases (manual)
 # =============================================================================
 
-name: Test and Publish
+name: Publish NPM Dev
 
 on:
   push:
-    branches: [ master, main, dev ]
-  pull_request:
-    branches: [ master, main ]
+    branches: [dev]
   workflow_dispatch:
     inputs:
-      publish_npm:
-        description: 'Publish NPM packages (dev tag)'
-        required: true
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      publish_vscode:
-        description: 'Publish VSCode extension (pre-release)'
+      skip_tests:
+        description: 'Skip tests (use with caution)'
         required: true
         default: 'false'
         type: choice
@@ -96,13 +85,17 @@ jobs:
           packages/sqlite-vec-wasm-node/dist/
         retention-days: 1
 
+  # Run tests unless skipped
   test:
     name: Run Tests
     runs-on: ubuntu-latest
     needs: build-wasm
+    if: github.event.inputs.skip_tests != 'true'
+
     strategy:
       matrix:
         node-version: [20.x, 22.x]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -141,11 +134,13 @@ jobs:
           pnpm run typecheck
           pnpm run lint
 
-  publish-npm-dev:
+  # Publish to NPM
+  publish:
     name: Publish NPM Dev Versions
-    needs: [build-wasm, test]
+    needs: [build-wasm]
     runs-on: ubuntu-latest
-    if: github.event.inputs.publish_npm == 'true' || github.ref == 'refs/heads/dev'
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -188,57 +183,3 @@ jobs:
           pnpm publish --tag dev --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  publish-vscode-prerelease:
-    name: Publish VSCode Extension Pre-release
-    needs: [build-wasm, test]
-    runs-on: ubuntu-latest
-    if: github.event.inputs.publish_vscode == 'true' || github.ref == 'refs/heads/dev'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Download WASM artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-module
-          path: packages/sqlite-vec-wasm-node/dist/
-
-      - name: Build core package
-        working-directory: packages/core
-        run: pnpm build
-
-      - name: Setup VSCE
-        run: npm install -g @vscode/vsce
-
-      - name: Build and package VSCode extension
-        working-directory: packages/vscode-extension
-        run: |
-          pnpm package:ci
-
-      - name: Publish to VSCode Marketplace (Pre-release)
-        working-directory: packages/vscode-extension
-        run: |
-          vsce publish --pre-release --no-dependencies -p ${{ secrets.VSCE_PAT }}
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vscode-extension-vsix
-          path: packages/vscode-extension/*.vsix

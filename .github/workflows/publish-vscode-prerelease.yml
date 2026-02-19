@@ -1,0 +1,191 @@
+# =============================================================================
+# Workflow: Publish VSCode Extension Pre-release
+# =============================================================================
+#
+# Purpose:
+#   Publishes pre-release versions of the VSCode extension to the marketplace.
+#   Triggered manually or automatically on dev branch pushes.
+#
+# Triggers:
+#   - push to dev branch (auto-publish)
+#   - workflow_dispatch (manual with choice to skip tests)
+#
+# Inputs:
+#   - skip_tests: Set to 'true' to skip running tests (default: false)
+#
+# Jobs:
+#   - build-wasm: Build WASM module
+#   - test: Run tests (unless skipped)
+#   - publish: Publish VSCode extension as pre-release
+#
+# Published Artifact:
+#   - VSCode Extension (pre-release) to marketplace
+#   - VSIX file as workflow artifact
+#
+# Related Workflows:
+#   - test-vscode.yml: VSCode extension testing
+#   - publish-vscode.yml: Production VSCode releases (manual)
+# =============================================================================
+
+name: Publish VSCode Pre-release
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests (use with caution)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  # Build WASM module first
+  build-wasm:
+    name: Build WASM Module
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Emscripten
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: '3.1.51'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 10
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'pnpm'
+
+    - name: Download WASM sources
+      working-directory: packages/sqlite-vec-wasm-node
+      run: make download
+
+    - name: Build WASM
+      working-directory: packages/sqlite-vec-wasm-node
+      run: make
+
+    - name: Upload WASM artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasm-module
+        path: |
+          packages/sqlite-vec-wasm-node/dist/
+        retention-days: 1
+
+  # Run tests unless skipped
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    if: github.event.inputs.skip_tests != 'true'
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-module
+          path: packages/sqlite-vec-wasm-node/dist/
+
+      - name: Build packages
+        run: |
+          pnpm --filter @tan-yong-sheng/code-context-core build
+          pnpm --filter @tan-yong-sheng/code-context-mcp build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Test VSCode Extension
+        working-directory: packages/vscode-extension
+        run: |
+          pnpm run typecheck
+          pnpm run lint
+
+  # Publish to VSCode Marketplace
+  publish:
+    name: Publish VSCode Extension Pre-release
+    needs: [build-wasm]
+    runs-on: ubuntu-latest
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-module
+          path: packages/sqlite-vec-wasm-node/dist/
+
+      - name: Build core package
+        working-directory: packages/core
+        run: pnpm build
+
+      - name: Setup VSCE
+        run: npm install -g @vscode/vsce
+
+      - name: Build and package VSCode extension
+        working-directory: packages/vscode-extension
+        run: |
+          pnpm package:ci
+
+      - name: Publish to VSCode Marketplace (Pre-release)
+        working-directory: packages/vscode-extension
+        run: |
+          vsce publish --pre-release --no-dependencies -p ${{ secrets.VSCE_PAT }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension-vsix
+          path: packages/vscode-extension/*.vsix
