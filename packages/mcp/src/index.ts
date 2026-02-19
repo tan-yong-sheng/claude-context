@@ -72,6 +72,8 @@ class ContextMcpServer {
         this.context = new Context({
             embedding,
             vectorDatabase,
+            embeddingDimension: config.embeddingDimension,
+            embeddingBatchSize: config.embeddingBatchSize,
             chunkLimit: config.chunkLimit,
             customIgnorePatterns: config.customIgnorePatterns
         });

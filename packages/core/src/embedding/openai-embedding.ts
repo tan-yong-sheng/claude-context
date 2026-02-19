@@ -112,7 +112,7 @@ export class OpenAIEmbedding extends Embedding {
     }
 
     getDimension(): number {
-        // For custom models, we need to detect the dimension first
+        // For known models, return the known dimension
         const model = this.config.model || 'text-embedding-3-small';
         const knownModels = OpenAIEmbedding.getSupportedModels();
 
@@ -121,10 +121,14 @@ export class OpenAIEmbedding extends Embedding {
             return knownModels[model].dimension;
         }
 
-        // For custom models, return the current dimension
-        // Note: This may be incorrect until detectDimension() is called
-        console.warn(`[OpenAIEmbedding] ⚠️ getDimension() called for custom model '${model}' - returning ${this.dimension}. Call detectDimension() first for accurate dimension.`);
-        return this.dimension;
+        // For custom models, return configured dimension if set
+        if (this.config.dimension && this.config.dimension > 0) {
+            return this.config.dimension;
+        }
+
+        // For unknown custom models without configured dimension, return 0
+        // This signals to the caller that dimension needs to be manually configured
+        return 0;
     }
 
     getProvider(): string {

@@ -54,7 +54,8 @@ function getDbPathFromCollection(collectionName: string, customDbDir?: string): 
     }
 
     // Check if collectionName looks like a hashed collection name (e.g., 'hybrid_code_chunks_66d4e57c' or 'code_chunks_66d4e57c')
-    const hashMatch = collectionName.match(/^(?:hybrid_)?code_chunks_([a-f0-9]{8})$/);
+    // Supports both 8-character and 16-character hashes
+    const hashMatch = collectionName.match(/^(?:hybrid_)?code_chunks_([a-f0-9]{8,16})$/);
     if (hashMatch) {
         // Use the hash directly as the filename
         const hash = hashMatch[1];
@@ -499,7 +500,6 @@ export class SqliteVecVectorDatabase implements VectorDatabase {
         outputFields: string[],
         limit?: number
     ): Promise<Record<string, any>[]> {
-        const db = this.initializeDb(collectionName);
         const tableName = this.getTableName(collectionName);
 
         const fields = outputFields.join(', ');
@@ -513,8 +513,20 @@ export class SqliteVecVectorDatabase implements VectorDatabase {
             sql += ` LIMIT ${limit}`;
         }
 
-        // Use db.all() which properly finalizes statements
-        return db.all(sql) as Record<string, any>[];
+        // Use a separate connection for metadata queries to avoid closing the main connection
+        // This is important when the background indexer is using the main connection
+        const dbPath = this.config.dbPath
+            ? getDbPathFromCollection(collectionName, this.config.dbPath)
+            : getDbPathFromCollection(collectionName);
+
+        const tempDb = new Database(dbPath);
+        try {
+            tempDb.exec('PRAGMA journal_mode=WAL;');
+            const results = tempDb.all(sql) as Record<string, any>[];
+            return results;
+        } finally {
+            tempDb.close();
+        }
     }
 
     async checkCollectionLimit(): Promise<boolean> {

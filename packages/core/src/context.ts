@@ -663,6 +663,7 @@ export class Context {
         }
 
         // Check for manual dimension override (config takes priority over env var)
+        // Then check known model dimensions, then require user input
         const envDimension = envManager.get('EMBEDDING_DIMENSION');
         const manualDimension = this.configEmbeddingDimension || (envDimension ? parseInt(envDimension, 10) : undefined);
         let dimension: number;
@@ -672,13 +673,20 @@ export class Context {
             const source = this.configEmbeddingDimension ? 'config' : 'EMBEDDING_DIMENSION env var';
             console.log(`[Context] 📏 Using configured dimension: ${dimension} (from ${source})`);
         } else {
-            throw new Error(
-                `Embedding dimension is required but not configured.\n\n` +
-                `Please set the embedding dimension in your configuration:\n` +
-                `- For known models (e.g., text-embedding-3-small), dimension is auto-filled\n` +
-                `- For custom models, manually enter the dimension (e.g., 1536, 768)\n\n` +
-                `Provider: ${this.embedding.getProvider()}`
-            );
+            // Check if we have a known model dimension
+            const knownDimension = this.embedding.getDimension();
+            if (knownDimension && knownDimension > 0) {
+                dimension = knownDimension;
+                console.log(`[Context] 📏 Using known model dimension: ${dimension}`);
+            } else {
+                throw new Error(
+                    `Embedding dimension is required but not configured.\n\n` +
+                    `Please set the embedding dimension in your configuration:\n` +
+                    `- For known models (e.g., text-embedding-3-small), dimension is auto-filled\n` +
+                    `- For custom models, manually enter the dimension (e.g., 1536, 768)\n\n` +
+                    `Provider: ${this.embedding.getProvider()}`
+                );
+            }
         }
         const dirName = path.basename(codebasePath);
 
