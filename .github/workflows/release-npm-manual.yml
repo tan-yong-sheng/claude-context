@@ -245,26 +245,7 @@ jobs:
           CORE_LATEST=$(npm view @tan-yong-sheng/code-context-core dist-tags.latest --json 2>/dev/null || echo '"0.0.0"')
           MCP_LATEST=$(npm view @tan-yong-sheng/code-context-mcp dist-tags.latest --json 2>/dev/null || echo '"0.0.0"')
 
-          MAX_LATEST=$(WASM_LATEST="$WASM_LATEST" CORE_LATEST="$CORE_LATEST" MCP_LATEST="$MCP_LATEST" node <<'NODE'
-          const normalize = (v) => String(v || '').replace(/^"|"$/g, '').trim();
-          const versions = [normalize(process.env.WASM_LATEST), normalize(process.env.CORE_LATEST), normalize(process.env.MCP_LATEST)]
-            .filter(v => /^\d+\.\d+\.\d+$/.test(v));
-          const cmp = (a, b) => {
-            const pa = a.split('.').map(Number);
-            const pb = b.split('.').map(Number);
-            for (let i = 0; i < 3; i++) {
-              if (pa[i] !== pb[i]) return pa[i] - pb[i];
-            }
-            return 0;
-          };
-          if (versions.length === 0) {
-            console.log('0.0.0');
-          } else {
-            versions.sort(cmp);
-            console.log(versions[versions.length - 1]);
-          }
-NODE
-          )
+          MAX_LATEST=$(WASM_LATEST="$WASM_LATEST" CORE_LATEST="$CORE_LATEST" MCP_LATEST="$MCP_LATEST" node -e "const normalize=(v)=>String(v||'').replace(/^\\\"|\\\"$/g,'').trim(); const versions=[normalize(process.env.WASM_LATEST),normalize(process.env.CORE_LATEST),normalize(process.env.MCP_LATEST)].filter(v=>/^\\d+\\.\\d+\\.\\d+$/.test(v)); const cmp=(a,b)=>{const pa=a.split('.').map(Number); const pb=b.split('.').map(Number); for(let i=0;i<3;i++){if(pa[i]!==pb[i]) return pa[i]-pb[i];} return 0;}; if(versions.length===0){process.stdout.write('0.0.0');} else {versions.sort(cmp); process.stdout.write(versions[versions.length-1]);}")
 
           echo "Registry latest versions -> wasm: ${WASM_LATEST}, core: ${CORE_LATEST}, mcp: ${MCP_LATEST}"
           echo "Max latest base: ${MAX_LATEST}"
@@ -295,18 +276,7 @@ NODE
             fi
           else
             if [ "${{ inputs.npm_tag }}" = "latest" ]; then
-              VERSION=$(MAX_LATEST="$MAX_LATEST" BUMP="${{ inputs.version_bump }}" node <<'NODE'
-              const v = process.env.MAX_LATEST || '0.0.0';
-              const bump = process.env.BUMP || 'patch';
-              const [maj, min, pat] = v.split('.').map(Number);
-              if (![maj, min, pat].every(Number.isFinite)) {
-                throw new Error(`Invalid MAX_LATEST: ${v}`);
-              }
-              if (bump === 'major') console.log(`${maj + 1}.0.0`);
-              else if (bump === 'minor') console.log(`${maj}.${min + 1}.0`);
-              else console.log(`${maj}.${min}.${pat + 1}`);
-NODE
-              )
+              VERSION=$(MAX_LATEST="$MAX_LATEST" BUMP="${{ inputs.version_bump }}" node -e "const v=process.env.MAX_LATEST||'0.0.0'; const bump=process.env.BUMP||'patch'; const [maj,min,pat]=v.split('.').map(Number); if(![maj,min,pat].every(Number.isFinite)){throw new Error('Invalid MAX_LATEST: '+v);} if(bump==='major') process.stdout.write((maj+1)+'.0.0'); else if(bump==='minor') process.stdout.write(maj+'.'+(min+1)+'.0'); else process.stdout.write(maj+'.'+min+'.'+(pat+1));")
             else
               VERSION="${MAX_LATEST}-${{ inputs.npm_tag }}.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
             fi
@@ -344,13 +314,7 @@ NODE
         run: |
           cd packages/core
           npm version "${{ steps.resolve-version.outputs.version }}" --no-git-tag-version
-          WASM_VERSION="${{ steps.resolve-version.outputs.version }}" node <<'NODE'
-          const fs = require('fs');
-          const path = 'package.json';
-          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-          pkg.dependencies['@tan-yong-sheng/sqlite-vec-wasm-node'] = process.env.WASM_VERSION;
-          fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
-NODE
+          WASM_VERSION="${{ steps.resolve-version.outputs.version }}" node -e "const fs=require('fs'); const path='package.json'; const pkg=JSON.parse(fs.readFileSync(path,'utf8')); pkg.dependencies['@tan-yong-sheng/sqlite-vec-wasm-node']=process.env.WASM_VERSION; fs.writeFileSync(path, JSON.stringify(pkg,null,2)+'\\n');"
 
       # Publish using npm directly from the artifact directory
       # This ensures we publish exactly what was built, not a fresh build
@@ -367,13 +331,7 @@ NODE
         run: |
           cd packages/mcp
           npm version "${{ steps.resolve-version.outputs.version }}" --no-git-tag-version
-          CORE_VERSION="${{ steps.resolve-version.outputs.version }}" node <<'NODE'
-          const fs = require('fs');
-          const path = 'package.json';
-          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-          pkg.dependencies['@tan-yong-sheng/code-context-core'] = process.env.CORE_VERSION;
-          fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
-NODE
+          CORE_VERSION="${{ steps.resolve-version.outputs.version }}" node -e "const fs=require('fs'); const path='package.json'; const pkg=JSON.parse(fs.readFileSync(path,'utf8')); pkg.dependencies['@tan-yong-sheng/code-context-core']=process.env.CORE_VERSION; fs.writeFileSync(path, JSON.stringify(pkg,null,2)+'\\n');"
 
       - name: Publish MCP to NPM
         if: ${{ !inputs.dry_run }}
