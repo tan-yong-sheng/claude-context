@@ -12,6 +12,9 @@
 #
 # Inputs:
 #   - release_type: dev, beta, or release (default: dev)
+#   - version_mode: auto or manual
+#   - version_bump: patch, minor, major (used for auto + release)
+#   - target_version: explicit version (required for manual mode)
 #
 # Jobs:
 #   - build-wasm: Build WASM module (required for core package)
@@ -45,6 +48,27 @@ on:
           - dev
           - beta
           - release
+      version_mode:
+        description: 'Version mode: auto computes from marketplace, manual uses target_version'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - manual
+      version_bump:
+        description: 'Version bump type (used only for auto mode with release type)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      target_version:
+        description: 'Target version for manual mode (example: 1.2.3 or 1.2.3-dev.1)'
+        required: false
+        type: string
 
 jobs:
   # Build WASM module first (required for core package)
@@ -216,6 +240,8 @@ jobs:
     needs: [build-wasm, test-npm, test-vscode]
     if: always() && needs.test-npm.result == 'success' && needs.test-vscode.result == 'success'
     runs-on: ubuntu-latest
+    outputs:
+      extension_version: ${{ steps.resolve-version.outputs.version }}
 
     steps:
       - name: Checkout
@@ -243,6 +269,74 @@ jobs:
 
       - name: Build core package
         run: pnpm --filter @tan-yong-sheng/code-context-core build
+
+      - name: Resolve extension version
+        id: resolve-version
+        run: |
+          npm install -g @vscode/vsce
+
+          EXT_JSON=$(vsce show tan-yong-sheng.ai-code-context --json)
+          CURRENT_VERSION=$(printf '%s' "$EXT_JSON" | node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); const v=(data.versions && data.versions[0] && data.versions[0].version) || '0.0.0'; process.stdout.write(v);")
+
+          VERSION=""
+          if [ "${{ inputs.version_mode }}" = "manual" ]; then
+            VERSION="${{ inputs.target_version }}"
+            if [ -z "$VERSION" ]; then
+              echo "Error: target_version is required when version_mode=manual"
+              exit 1
+            fi
+
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+              echo "Error: target_version '$VERSION' is not valid semver"
+              exit 1
+            fi
+
+            if [ "${{ inputs.release_type }}" = "release" ]; then
+              if [[ "$VERSION" == *-* ]]; then
+                echo "Error: release_type=release requires stable version (x.y.z), got '$VERSION'"
+                exit 1
+              fi
+            else
+              if [[ "$VERSION" != *"-${{ inputs.release_type }}."* ]]; then
+                echo "Error: pre-release target_version must contain '-${{ inputs.release_type }}.' suffix"
+                exit 1
+              fi
+            fi
+          else
+            if [ "${{ inputs.release_type }}" = "release" ]; then
+              VERSION=$(CURRENT_VERSION="$CURRENT_VERSION" BUMP="${{ inputs.version_bump }}" node <<'NODE'
+              const v = process.env.CURRENT_VERSION || '0.0.0';
+              const bump = process.env.BUMP || 'patch';
+              const stable = v.split('-')[0];
+              const [maj, min, pat] = stable.split('.').map(Number);
+              if (![maj, min, pat].every(Number.isFinite)) {
+                throw new Error(`Invalid CURRENT_VERSION: ${v}`);
+              }
+              if (bump === 'major') console.log(`${maj + 1}.0.0`);
+              else if (bump === 'minor') console.log(`${maj}.${min + 1}.0`);
+              else console.log(`${maj}.${min}.${pat + 1}`);
+NODE
+              )
+            else
+              BASE_VERSION=$(CURRENT_VERSION="$CURRENT_VERSION" node -e "const v=process.env.CURRENT_VERSION||'0.0.0'; process.stdout.write(v.split('-')[0]);")
+              VERSION="${BASE_VERSION}-${{ inputs.release_type }}.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+            fi
+          fi
+
+          EXISTS=$(EXT_JSON="$EXT_JSON" VERSION="$VERSION" node -e "const data=JSON.parse(process.env.EXT_JSON||'{}'); const versions=(data.versions||[]).map(v=>v.version); process.stdout.write(versions.includes(process.env.VERSION) ? 'true' : 'false');")
+          if [ "$EXISTS" = "true" ]; then
+            echo "Error: Extension version ${VERSION} already exists in Marketplace"
+            exit 1
+          fi
+
+          echo "Current marketplace version: ${CURRENT_VERSION}"
+          echo "Resolved extension version: ${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set extension version
+        run: |
+          cd packages/vscode-extension
+          npm version "${{ steps.resolve-version.outputs.version }}" --no-git-tag-version
 
       - name: Build VSCode extension
         run: |
@@ -301,17 +395,15 @@ jobs:
           name: vscode-extension
           path: vsix-artifacts
 
-      # Get version from VSIX file
+      # Get version from build output
       - name: Get version
         id: get-version
         run: |
-          VSIX_FILE=$(find vsix-artifacts -name "*.vsix" | head -1)
-          if [ -z "$VSIX_FILE" ]; then
-            echo "Error: No VSIX files found"
+          VERSION="${{ needs.build.outputs.extension_version }}"
+          if [ -z "$VERSION" ]; then
+            echo "Error: Build output extension_version is empty"
             exit 1
           fi
-          FILENAME=$(basename "$VSIX_FILE")
-          VERSION=$(echo "$FILENAME" | grep -oP '\d+\.\d+\.\d+' | head -1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Found version: $VERSION"
 

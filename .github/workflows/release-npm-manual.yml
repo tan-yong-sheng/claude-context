@@ -12,12 +12,14 @@
 #
 # Inputs:
 #   - npm_tag: dev, beta, or latest (default: dev)
-#   - version_bump: patch, minor, major (only for latest tag)
+#   - version_mode: auto or manual
+#   - version_bump: patch, minor, major (used for auto + latest)
+#   - target_version: explicit version (required for manual mode)
 #
 # Jobs:
 #   - build-wasm: Build WASM module (required for core package)
 #   - build: Builds core and MCP packages, runs E2E tests
-#   - publish: Publishes to npm with version bumping and git tagging
+#   - publish: Publishes to npm with registry-aware version resolution
 #
 # Outputs:
 #   - npm package published to registry
@@ -49,8 +51,16 @@ on:
           - dev
           - beta
           - latest
+      version_mode:
+        description: 'Version mode: auto computes from registry, manual uses target_version'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - manual
       version_bump:
-        description: 'Version bump type (only for latest tag)'
+        description: 'Version bump type (used only for auto mode with latest tag)'
         required: false
         default: 'patch'
         type: choice
@@ -58,6 +68,10 @@ on:
           - patch
           - minor
           - major
+      target_version:
+        description: 'Target version for manual mode (example: 1.2.3 or 1.2.3-dev.1)'
+        required: false
+        type: string
 
 jobs:
   # Build WASM module first (required for core package)
@@ -218,20 +232,98 @@ jobs:
           ls -la packages/core/dist/ | head -5
           ls -la packages/mcp/dist/ | head -5
 
+      - name: Resolve release version
+        id: resolve-version
+        run: |
+          WASM_LATEST=$(npm view @tan-yong-sheng/sqlite-vec-wasm-node dist-tags.latest --json 2>/dev/null || echo '"0.0.0"')
+          CORE_LATEST=$(npm view @tan-yong-sheng/code-context-core dist-tags.latest --json 2>/dev/null || echo '"0.0.0"')
+          MCP_LATEST=$(npm view @tan-yong-sheng/code-context-mcp dist-tags.latest --json 2>/dev/null || echo '"0.0.0"')
+
+          MAX_LATEST=$(WASM_LATEST="$WASM_LATEST" CORE_LATEST="$CORE_LATEST" MCP_LATEST="$MCP_LATEST" node <<'NODE'
+          const normalize = (v) => String(v || '').replace(/^"|"$/g, '').trim();
+          const versions = [normalize(process.env.WASM_LATEST), normalize(process.env.CORE_LATEST), normalize(process.env.MCP_LATEST)]
+            .filter(v => /^\d+\.\d+\.\d+$/.test(v));
+          const cmp = (a, b) => {
+            const pa = a.split('.').map(Number);
+            const pb = b.split('.').map(Number);
+            for (let i = 0; i < 3; i++) {
+              if (pa[i] !== pb[i]) return pa[i] - pb[i];
+            }
+            return 0;
+          };
+          if (versions.length === 0) {
+            console.log('0.0.0');
+          } else {
+            versions.sort(cmp);
+            console.log(versions[versions.length - 1]);
+          }
+NODE
+          )
+
+          echo "Registry latest versions -> wasm: ${WASM_LATEST}, core: ${CORE_LATEST}, mcp: ${MCP_LATEST}"
+          echo "Max latest base: ${MAX_LATEST}"
+
+          VERSION=""
+          if [ "${{ inputs.version_mode }}" = "manual" ]; then
+            VERSION="${{ inputs.target_version }}"
+            if [ -z "$VERSION" ]; then
+              echo "Error: target_version is required when version_mode=manual"
+              exit 1
+            fi
+
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+              echo "Error: target_version '$VERSION' is not valid semver"
+              exit 1
+            fi
+
+            if [ "${{ inputs.npm_tag }}" = "latest" ]; then
+              if [[ "$VERSION" == *-* ]]; then
+                echo "Error: latest releases must use stable version (x.y.z), got '$VERSION'"
+                exit 1
+              fi
+            else
+              if [[ "$VERSION" != *"-${{ inputs.npm_tag }}."* ]]; then
+                echo "Error: pre-release target_version must contain '-${{ inputs.npm_tag }}.' suffix"
+                exit 1
+              fi
+            fi
+          else
+            if [ "${{ inputs.npm_tag }}" = "latest" ]; then
+              VERSION=$(MAX_LATEST="$MAX_LATEST" BUMP="${{ inputs.version_bump }}" node <<'NODE'
+              const v = process.env.MAX_LATEST || '0.0.0';
+              const bump = process.env.BUMP || 'patch';
+              const [maj, min, pat] = v.split('.').map(Number);
+              if (![maj, min, pat].every(Number.isFinite)) {
+                throw new Error(`Invalid MAX_LATEST: ${v}`);
+              }
+              if (bump === 'major') console.log(`${maj + 1}.0.0`);
+              else if (bump === 'minor') console.log(`${maj}.${min + 1}.0`);
+              else console.log(`${maj}.${min}.${pat + 1}`);
+NODE
+              )
+            else
+              VERSION="${MAX_LATEST}-${{ inputs.npm_tag }}.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+            fi
+          fi
+
+          for PKG in \
+            "@tan-yong-sheng/sqlite-vec-wasm-node" \
+            "@tan-yong-sheng/code-context-core" \
+            "@tan-yong-sheng/code-context-mcp"; do
+            if npm view "${PKG}@${VERSION}" version >/dev/null 2>&1; then
+              echo "Error: ${PKG}@${VERSION} already exists on npm"
+              exit 1
+            fi
+          done
+
+          echo "Resolved publish version: ${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
       # Step 1: Publish WASM package first
-      - name: Bump WASM version
-        id: bump-wasm
+      - name: Set WASM version
         run: |
           cd packages/sqlite-vec-wasm-node
-          if [ "${{ inputs.npm_tag }}" == "latest" ]; then
-            npm version ${{ inputs.version_bump }} --no-git-tag-version
-          else
-            CURRENT_VERSION=$(node -p "require('./package.json').version")
-            TAG_VERSION="${CURRENT_VERSION}-${{ inputs.npm_tag }}.$(date +%s)"
-            echo "Publishing WASM version: $TAG_VERSION"
-            npm version "$TAG_VERSION" --no-git-tag-version
-          fi
-          echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+          npm version "${{ steps.resolve-version.outputs.version }}" --no-git-tag-version
 
       - name: Publish WASM to NPM
         run: |
@@ -241,30 +333,17 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Step 2: Update core's WASM dependency and publish
-      - name: Bump core version
-        id: bump-core
+      - name: Set core version and WASM dependency
         run: |
           cd packages/core
-          # Replace workspace:* with the actual published WASM version
-          WASM_VERSION=$(cd ../sqlite-vec-wasm-node && node -p "require('./package.json').version")
-          sed -i "s/\"@tan-yong-sheng\/sqlite-vec-wasm-node\": \"workspace:\*\"/\"@tan-yong-sheng\/sqlite-vec-wasm-node\": \"$WASM_VERSION\"/" package.json
-          if [ "${{ inputs.npm_tag }}" == "latest" ]; then
-            npm version ${{ inputs.version_bump }} --no-git-tag-version
-          else
-            CURRENT_VERSION=$(node -p "require('./package.json').version")
-            TAG_VERSION="${CURRENT_VERSION}-${{ inputs.npm_tag }}.$(date +%s)"
-            echo "Publishing version: $TAG_VERSION"
-            npm version "$TAG_VERSION" --no-git-tag-version
-          fi
-          echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
-      # Update MCP's dependency on core to use the published version
-      - name: Update MCP core dependency
-        run: |
-          cd packages/mcp
-          CORE_VERSION=$(cd ../core && node -p "require('./package.json').version")
-          # Replace workspace:* with the actual published version
-          sed -i "s/\"@tan-yong-sheng\/code-context-core\": \"workspace:\*\"/\"@tan-yong-sheng\/code-context-core\": \"$CORE_VERSION\"/" package.json
+          npm version "${{ steps.resolve-version.outputs.version }}" --no-git-tag-version
+          WASM_VERSION="${{ steps.resolve-version.outputs.version }}" node <<'NODE'
+          const fs = require('fs');
+          const path = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          pkg.dependencies['@tan-yong-sheng/sqlite-vec-wasm-node'] = process.env.WASM_VERSION;
+          fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+NODE
 
       # Publish using npm directly from the artifact directory
       # This ensures we publish exactly what was built, not a fresh build
@@ -275,21 +354,19 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Bump MCP version
-        id: bump-mcp
+      # Step 3: Update MCP dependency and publish
+      - name: Set MCP version and core dependency
         run: |
           cd packages/mcp
-          if [ "${{ inputs.npm_tag }}" == "latest" ]; then
-            npm version ${{ inputs.version_bump }} --no-git-tag-version
-          else
-            CURRENT_VERSION=$(node -p "require('./package.json').version")
-            TAG_VERSION="${CURRENT_VERSION}-${{ inputs.npm_tag }}.$(date +%s)"
-            echo "Publishing MCP version: $TAG_VERSION"
-            npm version "$TAG_VERSION" --no-git-tag-version
-          fi
-          echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+          npm version "${{ steps.resolve-version.outputs.version }}" --no-git-tag-version
+          CORE_VERSION="${{ steps.resolve-version.outputs.version }}" node <<'NODE'
+          const fs = require('fs');
+          const path = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          pkg.dependencies['@tan-yong-sheng/code-context-core'] = process.env.CORE_VERSION;
+          fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+NODE
 
-      # Publish using npm directly from the artifact directory
       - name: Publish MCP to NPM
         run: |
           cd packages/mcp
@@ -307,7 +384,7 @@ jobs:
       - name: Create Git tag (latest only)
         if: inputs.npm_tag == 'latest'
         run: |
-          VERSION=$(node -p "require('./packages/core/package.json').version")
+          VERSION="${{ steps.resolve-version.outputs.version }}"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git tag "v${VERSION}"
@@ -318,7 +395,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const version = require('./packages/core/package.json').version;
+            const version = '${{ steps.resolve-version.outputs.version }}';
             github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
